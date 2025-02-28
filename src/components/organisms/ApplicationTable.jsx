@@ -126,6 +126,8 @@ const ApplicationDialog = ({
     }
 
     try {
+
+
       // Create a new application history in the selected application
       const createApplicationHistory = await ZOHO.CRM.API.insertRecord({
         Entity: "Applications_History",
@@ -138,7 +140,7 @@ const ApplicationDialog = ({
           Regarding: selectedRowData.regarding,
           Duration_Min: selectedRowData.duration,
           Date: selectedRowData.date_time,
-          Stakeholder: selectedRowData.Stakeholder,
+          Stakeholder: selectedRowData.stakeHolder,
         },
         Trigger: ["workflow"],
       });
@@ -163,7 +165,7 @@ const ApplicationDialog = ({
           arguments: JSON.stringify({
             fromModule: "History1",
             toModule: "Applications_History",
-            fromID: selectedRowData?.historyDetails?.id,
+            fromID: selectedRowData?.id,
             ToID: newHistoryId,
           }),
         };

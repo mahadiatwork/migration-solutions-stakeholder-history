@@ -180,7 +180,7 @@ const App = () => {
           result: obj?.History_Result || "No Result",
           duration: obj?.Duration || "N/A",
           regarding: obj?.Regarding || "No Regarding",
-          details: obj?.History_Details || "No Details",
+          details: obj?.History_Details_Plain || "No Details",
           icon: <DownloadIcon />,
           ownerName: obj?.Owner?.name || "Unknown Owner",
           historyDetails: obj?.Contact_History_Info,
@@ -189,7 +189,7 @@ const App = () => {
         }));
 
         setRelatedListData(tempData || []);
-
+        
         const types = data
           ?.map((el) => el.History_Type)
           ?.filter((el) => el !== undefined && el !== null);
@@ -380,7 +380,7 @@ const App = () => {
     try {
       // Fetch related applications for the current contact
       const response = await ZOHO.CRM.API.getRelatedRecords({
-        Entity: "Contacts",
+        Entity: "Accounts",
         RecordID: currentModuleData?.id,
         RelatedList: "Applications",
         page: 1,

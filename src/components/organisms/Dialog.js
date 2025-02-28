@@ -161,6 +161,8 @@ export function Dialog({
   // Reinitialize dialog state when `openDialog` or `obj` changes
   React.useEffect(() => {
     if (openDialog) {
+
+      console.log("same", selectedContacts)
       setFormData({
         Participants: selectedRowData?.Participants || [],
         result: selectedRowData?.result || "Meeting Held",
@@ -174,7 +176,7 @@ export function Dialog({
           : dayjs(),
       });
       setSelectedContacts(
-        selectedRowData?.Participants  || []
+        selectedContacts  || []
       );
       setHistoryName(
         selectedRowData?.Participants?.map((p) => p.Full_Name).join(", ") || ""
@@ -188,7 +190,7 @@ export function Dialog({
           null
       );
 
-      setHistoryContacts(selectedRowData?.Participants || []);
+      setHistoryContacts(selectedContacts || []);
     } else {
       // Reset formData to avoid stale data
       setFormData({});
@@ -197,11 +199,11 @@ export function Dialog({
 
   React.useEffect(() => {
     const fetchHistoryData = async () => {
-      if (selectedRowData?.historyDetails) {
+      if (selectedRowData?.id) {
         try {
           const data = await ZOHO.CRM.API.getRelatedRecords({
             Entity: "History1",
-            RecordID: selectedRowData?.historyDetails?.id,
+            RecordID: selectedRowData?.id,
             RelatedList: "Contacts3",
             page: 1,
             per_page: 200,
@@ -247,6 +249,7 @@ export function Dialog({
   };
 
   const handleSubmit = async (event) => {
+
     event.preventDefault();
 
   
@@ -265,6 +268,7 @@ export function Dialog({
       .map((c) => c.Full_Name)
       .join(", ");
     const finalData = {
+      id: selectedRowData?.id,
       Name: updatedHistoryName,
       History_Details_Plain: formData.details,
       Regarding: formData.regarding,
@@ -318,7 +322,7 @@ export function Dialog({
             recordId: historyId,
             data: formData?.attachment,
           });
-          // console.log({ fileResp });
+          console.log({ fileResp });
         }
 
         let contactRecordIds = [];
@@ -331,6 +335,7 @@ export function Dialog({
               APIData: {
                 Contact_History_Info: { id: historyId },
                 Contact_Details: { id: contact.id },
+                Stakeholder: finalData?.Stakeholder, // Add this field
               },
               Trigger: ["workflow"],
             });
@@ -389,26 +394,24 @@ export function Dialog({
       const otherUserId = "76775000000809089";
       const updateConfig = {
         Entity: "History1",
-        RecordID: selectedRowData?.historyDetails?.id,
+        RecordID: finalData?.id,
         APIData: {
-          id: selectedRowData?.historyDetails?.id,
-          ...finalData,
-          Owner: { id: finalData?.Owner?.id },
+          id: finalData?.id,
+          ...finalData
         },
         Trigger: ["workflow"],
       };
 
-      console.log({ updateConfig });
 
       const updateResponse = await ZOHO.CRM.API.updateRecord(updateConfig);
 
       if (updateResponse?.data[0]?.code === "SUCCESS") {
-        const historyId = selectedRowData?.historyDetails?.id;
+        const historyId = selectedRowData?.id;
 
         // Delete attachment
         const deleteFileResp = await zohoApi.file.deleteAttachment({
           module: "History1",
-          recordId: selectedRowData?.historyDetails?.id,
+          recordId: historyId,
           attachment_id: loadedAttachmentFromRecord?.[0]?.id,
         });
 
@@ -507,12 +510,13 @@ export function Dialog({
 
     try {
       // Delete related records first
-      if (selectedRowData?.historyDetails) {
+      if (selectedRowData?.id) {
         const relatedRecordsResponse = await ZOHO.CRM.API.getRelatedRecords({
           Entity: "History1",
-          RecordID: selectedRowData?.historyDetails?.id,
+          RecordID: selectedRowData?.id,
           RelatedList: "Contacts3",
         });
+
         const relatedRecords = relatedRecordsResponse?.data || [];
         const deletePromises = relatedRecords.map((record) =>
           ZOHO.CRM.API.deleteRecord({
@@ -527,7 +531,7 @@ export function Dialog({
       // Delete the main record
       const response = await ZOHO.CRM.API.deleteRecord({
         Entity: "History1",
-        RecordID: selectedRowData?.historyDetails?.id,
+        RecordID: selectedRowData?.id,
       });
 
       if (response?.data[0]?.code === "SUCCESS") {
