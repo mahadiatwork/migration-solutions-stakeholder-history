@@ -8,8 +8,6 @@ export default function Stakeholder({ formData, handleInputChange, ZOHO, current
 
   const debounceTimeoutRef = useRef(null);
 
-  console.log("mahadi", { currentModuleData, selectedStakeholder });
-
   /**
    * Effect 1: Prepopulate selectedStakeholder
    * Priority order:

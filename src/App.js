@@ -162,15 +162,11 @@ const App = () => {
           approved: "both",
           RecordID: recordId,
         });
-
-        console.log("currentContactData", currentModuleResponse);
         setCurrentModuleData(currentModuleResponse?.data?.[0] || null);
         
         if (currentContact) {
           setCurrentGlobalContact(currentContact);
         }
-
-        console.log("prostab", data)
 
         const tempData = data?.map((obj) => ({
           name: obj?.Name || "No Name",

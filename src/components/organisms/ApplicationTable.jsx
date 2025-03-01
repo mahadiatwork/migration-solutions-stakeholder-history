@@ -108,7 +108,6 @@ const ApplicationDialog = ({
   useEffect(() => {
     if (currentContact) {
       setMahadiContact(currentContact);
-      console.log("Current Contact in useEffect:", currentContact);
     }
   }, [currentContact]);
 

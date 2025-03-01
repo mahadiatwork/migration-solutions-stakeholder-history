@@ -32,8 +32,6 @@ export default function ContactField({
   currentContact, // New prop
 }) {
 
-
-  console.log("nothing else matters,", selectedRowData)
   const [contacts, setContacts] = useState([]);
   const [selectedParticipants, setSelectedParticipants] = useState([]);
   const [searchType, setSearchType] = useState("First_Name");
