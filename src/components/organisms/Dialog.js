@@ -103,8 +103,8 @@ export function Dialog({
     ownerList?.find(
       (owner) => owner?.full_name === selectedRowData?.ownerName
     ) ||
-      loggedInUser ||
-      null
+    loggedInUser ||
+    null
   );
   const [selectedType, setSelectedType] = React.useState("Meeting");
   const [loadedAttachmentFromRecord, setLoadedAttachmentFromRecord] =
@@ -119,7 +119,7 @@ export function Dialog({
     message: "",
     severity: "success",
   });
-  
+
   const handleSelectFile = async (e) => {
     e.preventDefault();
     if ([...e.target.files]?.length > 1) {
@@ -175,7 +175,7 @@ export function Dialog({
           : dayjs(),
       });
       setSelectedContacts(
-        selectedContacts  || []
+        selectedContacts || []
       );
       setHistoryName(
         selectedRowData?.Participants?.map((p) => p.Full_Name).join(", ") || ""
@@ -185,8 +185,8 @@ export function Dialog({
         ownerList?.find(
           (owner) => owner?.full_name === selectedRowData?.ownerName
         ) ||
-          loggedInUser ||
-          null
+        loggedInUser ||
+        null
       );
 
       setHistoryContacts(selectedContacts || []);
@@ -214,7 +214,7 @@ export function Dialog({
           }));
 
 
-          console.log({contactDetailsArray})
+          console.log({ contactDetailsArray })
           setHistoryContacts(contactDetailsArray);
           setSelectedContacts(contactDetailsArray);
           setFormData((prevFormData) => ({
@@ -251,7 +251,7 @@ export function Dialog({
 
     event.preventDefault();
 
-  
+
     let selectedParticipants = [];
 
     if (formData.Participants) {
@@ -272,10 +272,12 @@ export function Dialog({
       History_Details_Plain: formData.details,
       Regarding: formData.regarding,
       Owner: selectedOwner,
-      History_Result: formData.result[0] || "",
+      History_Result: Array.isArray(formData.result) && formData.result.length > 0
+        ? formData.result[0]
+        : formData.result,
       Stakeholder: formData.stakeHolder
         ? formData.stakeHolder
-        : {id: currentModuleData.id, name: currentModuleData.Account_Name},
+        : { id: currentModuleData.id, name: currentModuleData.Account_Name },
       History_Type: formData.type || "",
       Duration: formData.duration ? String(formData.duration) : null,
       Date: formData.date_time
