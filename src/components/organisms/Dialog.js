@@ -277,7 +277,7 @@ export function Dialog({
         : formData.result,
       Stakeholder: formData.stakeHolder
         ? formData.stakeHolder
-        : { id: currentModuleData.id, name: currentModuleData.Account_Name },
+        : (currentModuleData ? { id: currentModuleData?.id, name: currentModuleData?.Account_Name } : null),
       History_Type: formData.type || "",
       Duration: formData.duration ? String(formData.duration) : null,
       Date: formData.date_time
@@ -491,6 +491,11 @@ export function Dialog({
         };
 
         if (onRecordAdded) onRecordAdded(updatedRecord);
+
+
+        if (finalData?.Stakeholder === null) {
+          window.location.reload();
+        }
 
         setSnackbar({
           open: true,
@@ -1121,17 +1126,21 @@ export function Dialog({
               multiline
               variant="standard"
               minRows={3}
-              value={formData?.details || ""} // Use controlled input
+              value={formData?.details || ""}
               onChange={(e) => handleInputChange("details", e.target.value)}
+              
               sx={{
                 "& .MuiInputBase-input": {
-                  fontSize: "9pt", // Input text font size
+                  fontSize: "9pt",
+                  height: "75px", // Fix height to prevent continuous resizing
+                  overflowY: "auto" // Allow scrolling instead of resizing
                 },
                 "& .MuiInputLabel-root": {
-                  fontSize: "9pt", // Label font size
+                  fontSize: "9pt",
                 },
               }}
             />
+
           </Box>
         </DialogContent>
         <DialogActions
