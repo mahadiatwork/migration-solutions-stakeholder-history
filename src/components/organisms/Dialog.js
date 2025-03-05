@@ -145,6 +145,7 @@ export function Dialog({
         attachment: { name: data?.[0]?.File_Name },
       }));
       setLoadedAttachmentFromRecord(data);
+      console.log("file data", data)
     };
     if (selectedRowData?.id && load) {
       load = false;
