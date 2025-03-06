@@ -95,7 +95,7 @@ export function Dialog({
   applications,
   openApplicationDialog,
   setOpenApplicationDialog,
-  currentModuleData
+  currentModuleData,
 }) {
   const [historyName, setHistoryName] = React.useState("");
   const [historyContacts, setHistoryContacts] = React.useState([]);
@@ -103,8 +103,8 @@ export function Dialog({
     ownerList?.find(
       (owner) => owner?.full_name === selectedRowData?.ownerName
     ) ||
-    loggedInUser ||
-    null
+      loggedInUser ||
+      null
   );
   const [selectedType, setSelectedType] = React.useState("Meeting");
   const [loadedAttachmentFromRecord, setLoadedAttachmentFromRecord] =
@@ -145,7 +145,7 @@ export function Dialog({
         attachment: { name: data?.[0]?.File_Name },
       }));
       setLoadedAttachmentFromRecord(data);
-      console.log("file data", data)
+      console.log("file data", data);
     };
     if (selectedRowData?.id && load) {
       load = false;
@@ -161,8 +161,7 @@ export function Dialog({
   // Reinitialize dialog state when `openDialog` or `obj` changes
   React.useEffect(() => {
     if (openDialog) {
-
-      console.log("same", selectedContacts)
+      console.log("same", selectedContacts);
       setFormData({
         Participants: selectedRowData?.Participants || [],
         result: selectedRowData?.result || "Meeting Held",
@@ -175,9 +174,7 @@ export function Dialog({
           ? dayjs(selectedRowData.date_time)
           : dayjs(),
       });
-      setSelectedContacts(
-        selectedContacts || []
-      );
+      setSelectedContacts(selectedContacts || []);
       setHistoryName(
         selectedRowData?.Participants?.map((p) => p.Full_Name).join(", ") || ""
       );
@@ -186,8 +183,8 @@ export function Dialog({
         ownerList?.find(
           (owner) => owner?.full_name === selectedRowData?.ownerName
         ) ||
-        loggedInUser ||
-        null
+          loggedInUser ||
+          null
       );
 
       setHistoryContacts(selectedContacts || []);
@@ -214,8 +211,7 @@ export function Dialog({
             id: record.Contact_Details.id,
           }));
 
-
-          console.log({ contactDetailsArray })
+          console.log({ contactDetailsArray });
           setHistoryContacts(contactDetailsArray);
           setSelectedContacts(contactDetailsArray);
           setFormData((prevFormData) => ({
@@ -249,9 +245,7 @@ export function Dialog({
   };
 
   const handleSubmit = async (event) => {
-
     event.preventDefault();
-
 
     let selectedParticipants = [];
 
@@ -273,12 +267,15 @@ export function Dialog({
       History_Details_Plain: formData.details,
       Regarding: formData.regarding,
       Owner: selectedOwner,
-      History_Result: Array.isArray(formData.result) && formData.result.length > 0
-        ? formData.result[0]
-        : formData.result,
+      History_Result:
+        Array.isArray(formData.result) && formData.result.length > 0
+          ? formData.result[0]
+          : formData.result,
       Stakeholder: formData.stakeHolder
         ? formData.stakeHolder
-        : (currentModuleData ? { id: currentModuleData?.id, name: currentModuleData?.Account_Name } : null),
+        : currentModuleData
+        ? { id: currentModuleData?.id, name: currentModuleData?.Account_Name }
+        : null,
       History_Type: formData.type || "",
       Duration: formData.duration ? String(formData.duration) : null,
       Date: formData.date_time
@@ -399,11 +396,10 @@ export function Dialog({
         RecordID: finalData?.id,
         APIData: {
           id: finalData?.id,
-          ...finalData
+          ...finalData,
         },
         Trigger: ["workflow"],
       };
-
 
       const updateResponse = await ZOHO.CRM.API.updateRecord(updateConfig);
 
@@ -467,7 +463,7 @@ export function Dialog({
               APIData: {
                 Contact_History_Info: { id: historyId },
                 Contact_Details: { id: contact.id },
-                Stakeholder: finalData?.Stakeholder
+                Stakeholder: finalData?.Stakeholder,
               },
               Trigger: ["workflow"],
             });
@@ -492,7 +488,6 @@ export function Dialog({
         };
 
         if (onRecordAdded) onRecordAdded(updatedRecord);
-
 
         if (finalData?.Stakeholder === null) {
           window.location.reload();
@@ -780,8 +775,6 @@ export function Dialog({
     setOpenApplicationDialog(false);
     setSelectedApplicationId(null);
   };
-
-
 
   return (
     <>
@@ -1129,19 +1122,17 @@ export function Dialog({
               minRows={3}
               value={formData?.details || ""}
               onChange={(e) => handleInputChange("details", e.target.value)}
-              
               sx={{
                 "& .MuiInputBase-input": {
                   fontSize: "9pt",
                   height: "75px", // Fix height to prevent continuous resizing
-                  overflowY: "auto" // Allow scrolling instead of resizing
+                  overflowY: "auto", // Allow scrolling instead of resizing
                 },
                 "& .MuiInputLabel-root": {
                   fontSize: "9pt",
                 },
               }}
             />
-
           </Box>
         </DialogContent>
         <DialogActions
