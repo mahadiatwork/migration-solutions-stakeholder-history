@@ -103,8 +103,8 @@ export function Dialog({
     ownerList?.find(
       (owner) => owner?.full_name === selectedRowData?.ownerName
     ) ||
-      loggedInUser ||
-      null
+    loggedInUser ||
+    null
   );
   const [selectedType, setSelectedType] = React.useState("Meeting");
   const [loadedAttachmentFromRecord, setLoadedAttachmentFromRecord] =
@@ -183,8 +183,8 @@ export function Dialog({
         ownerList?.find(
           (owner) => owner?.full_name === selectedRowData?.ownerName
         ) ||
-          loggedInUser ||
-          null
+        loggedInUser ||
+        null
       );
 
       setHistoryContacts(selectedContacts || []);
@@ -274,8 +274,8 @@ export function Dialog({
       Stakeholder: formData.stakeHolder
         ? formData.stakeHolder
         : currentModuleData
-        ? { id: currentModuleData?.id, name: currentModuleData?.Account_Name }
-        : null,
+          ? { id: currentModuleData?.id, name: currentModuleData?.Account_Name }
+          : null,
       History_Type: formData.type || "",
       Duration: formData.duration ? String(formData.duration) : null,
       Date: formData.date_time
@@ -363,15 +363,15 @@ export function Dialog({
 
         // Notify parent about the created record
         const updatedRecord = {
-          id: contactRecordIds[0] || null, // Set the first inserted History_X_Contacts ID (or null if none succeeded)
           ...finalData,
+          id: historyId || null, // Set the first inserted History_X_Contacts ID (or null if none succeeded)
           Participants: selectedParticipants,
           historyDetails: {
             name: selectedParticipants.map((c) => c.Full_Name).join(", "),
             id: historyId, // Add the History1 record ID to historyDetails
           },
         };
-
+        console.log({ historyId, contactRecordIds })
         if (onRecordAdded) onRecordAdded(updatedRecord);
       } else {
         throw new Error("Failed to create History1 record.");

@@ -246,7 +246,9 @@ export function Table({
                         borderBottom: "1px solid #ddd",
                       },
                     }}
-                    onDoubleClick={() => handleClickOpenEditDialog(row)}
+                    onDoubleClick={() => {
+                      console.log({row})
+                      handleClickOpenEditDialog(row)}}
                     onClick={() => handleRowClick(row)}
                   >
                     <TableCell
