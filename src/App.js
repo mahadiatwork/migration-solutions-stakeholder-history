@@ -172,7 +172,7 @@ const App = () => {
         const tempData = data?.map((obj) => ({
           name: obj?.Name || "No Name",
           id: obj?.id,
-          date_time: obj?.History_Date_Time,
+          date_time: obj?.Date,
           type: obj?.History_Type || "Unknown Type",
           result: obj?.History_Result || "No Result",
           duration: obj?.Duration || "N/A",
