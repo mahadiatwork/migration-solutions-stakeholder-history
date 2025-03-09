@@ -249,11 +249,19 @@ const App = () => {
       }));
     }
 
+    const updatedName = (Array.isArray(newRecord.Participants) && newRecord.Participants.length > 0)
+  ? newRecord.Participants.map((c) => c?.Full_Name || "Unnamed").join(", ")
+  : newRecord?.Stakeholder?.name
+    ? newRecord.Stakeholder.name
+    : newRecord?.name
+      ? newRecord.name
+      : "Unknown Name";
+
+
+
     const normalizedRecord = {
       id: newRecord.id,
-      name: newRecord.Participants
-        ? newRecord.Participants.map((c) => c.Full_Name).join(", ")
-        : newRecord.name || "Unknown Name",
+      name: updatedName,
       date_time: newRecord.Date || dayjs().format(), // Ensure date is consistent
       type: newRecord.History_Type || "Unknown Type",
       result: newRecord.History_Result || "No Result",

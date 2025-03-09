@@ -29,7 +29,6 @@ export default function ContactField({
   handleInputChange,
   ZOHO,
   selectedRowData = {}, // Default to an empty object
-  currentContact, // New prop
 }) {
 
   const [contacts, setContacts] = useState([]);
@@ -59,10 +58,6 @@ export default function ContactField({
       fontSize: "9pt",
     },
   };
-
-  const selectedContact = selectedRowData?.historyDetails?.id
-    ? selectedRowData
-    : currentContact;
 
   useEffect(() => {
     const fetchParticipantsDetails = async () => {

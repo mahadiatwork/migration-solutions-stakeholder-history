@@ -253,14 +253,16 @@ export function Dialog({
       selectedParticipants = formData.Participants;
     }
 
-    if (selectedParticipants.length === 0) {
-      selectedParticipants = [currentContact];
-    }
 
-    // Generate history name based on selected contacts
-    const updatedHistoryName = selectedParticipants
-      .map((c) => c.Full_Name)
-      .join(", ");
+// Ensure selectedParticipants is a valid array
+const updatedHistoryName = (Array.isArray(selectedParticipants) && selectedParticipants.length > 0)
+  ? selectedParticipants.map((c) => c?.Full_Name).join(", ")
+  : (formData?.Stakeholder?.name) // Check if stakeHolder exists and has a name
+    ? formData.Stakeholder.name
+    : (currentModuleData?.Account_Name) // Check if currentModuleData has Account_Name
+      ? currentModuleData.Account_Name
+      : "Unknown"; // Fallback name if everything else is empty
+
     const finalData = {
       id: selectedRowData?.id,
       Name: updatedHistoryName,
@@ -360,6 +362,17 @@ export function Dialog({
           message: "Record created successfully!",
           severity: "success",
         });
+
+        // Ensure selectedParticipants is a valid array
+const updatedHistoryName = (Array.isArray(selectedParticipants) && selectedParticipants.length > 0)
+? selectedParticipants.map((c) => c?.Full_Name).join(", ")
+: (formData?.Stakeholder?.name) // Check if stakeHolder exists and has a name
+  ? formData.Stakeholder.name
+  : (currentModuleData?.Account_Name) // Check if currentModuleData has Account_Name
+    ? currentModuleData.Account_Name
+    : "Unknown"; // Fallback name if everything else is empty
+
+    
 
         // Notify parent about the created record
         const updatedRecord = {
