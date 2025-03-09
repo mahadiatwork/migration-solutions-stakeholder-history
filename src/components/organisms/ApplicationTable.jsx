@@ -92,6 +92,7 @@ const ApplicationDialog = ({
   historyContacts,
   selectedRowData,
   currentContact,
+  selectedOwner
 }) => {
   const [selectedApplicationId, setSelectedApplicationId] = useState(null);
   const [mahadiContact, setMahadiContact] = useState(null);
@@ -140,6 +141,7 @@ const ApplicationDialog = ({
           Duration_Min: selectedRowData.duration,
           Date: selectedRowData.date_time,
           Stakeholder: selectedRowData.stakeHolder,
+          Owner: selectedOwner
         },
         Trigger: ["workflow"],
       });
