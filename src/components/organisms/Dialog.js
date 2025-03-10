@@ -1064,6 +1064,7 @@ const updatedHistoryName = (Array.isArray(selectedParticipants) && selectedParti
               <RegardingField
                 formData={formData}
                 handleInputChange={handleInputChange}
+                selectedRowData={selectedRowData}
               />
             </Grid>
           </Grid>
