@@ -46,7 +46,6 @@ const DownloadButton = ({ rowId, rowIcon, isSelected }) => {
           module: "History1",
           recordId: rowId,
         });
-
         if (data?.length > 0) {
           const downloadResp = await zohoApi.file.downloadAttachmentById({
             module: "History1",
@@ -328,7 +327,7 @@ export function Table({
                       <DownloadButton
                         // rowId={row?.id}
                         isSelected={isSelected}
-                        rowId={row.historyDetails?.id}
+                        rowId={row?.id}
                         rowIcon={<DownloadIcon />}
                       />
                     </TableCell>

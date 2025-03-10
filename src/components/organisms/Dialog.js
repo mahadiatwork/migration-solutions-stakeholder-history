@@ -257,8 +257,8 @@ export function Dialog({
 // Ensure selectedParticipants is a valid array
 const updatedHistoryName = (Array.isArray(selectedParticipants) && selectedParticipants.length > 0)
   ? selectedParticipants.map((c) => c?.Full_Name).join(", ")
-  : (formData?.Stakeholder?.name) // Check if stakeHolder exists and has a name
-    ? formData.Stakeholder.name
+  : (formData?.stakeHolder) // Check if stakeHolder exists and has a name
+    ? formData.stakeHolder.name
     : (currentModuleData?.Account_Name) // Check if currentModuleData has Account_Name
       ? currentModuleData.Account_Name
       : "Unknown"; // Fallback name if everything else is empty
@@ -284,6 +284,7 @@ const updatedHistoryName = (Array.isArray(selectedParticipants) && selectedParti
         ? dayjs(formData.date_time).format("YYYY-MM-DDTHH:mm:ssZ")
         : null,
     };
+
 
     try {
       if (selectedRowData) {
