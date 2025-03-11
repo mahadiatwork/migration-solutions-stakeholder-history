@@ -259,9 +259,9 @@ export function Table({
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        row.historyDetails?.id &&
+                        row?.id &&
                           window.open(
-                            `https://crm.zoho.com.au/crm/org7004396182/tab/CustomModule4/${row.historyDetails.id}`,
+                            `https://crm.zoho.com.au/crm/org7004396182/tab/CustomModule4/${row?.id}`,
                             "_blank"
                           );
                       }}
