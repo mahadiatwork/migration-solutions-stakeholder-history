@@ -95,7 +95,6 @@ function EnhancedTableHead({ order, orderBy, handleRequestSort }) {
   };
 
   const headCells = [
-    { id: "name", numeric: false, label: "Name" },
     { id: "date_time", numeric: false, label: "Date & Time" },
     { id: "type", numeric: false, label: "Type" },
     { id: "result", numeric: false, label: "Result" },
@@ -113,6 +112,7 @@ function EnhancedTableHead({ order, orderBy, handleRequestSort }) {
       dontShowSort: true,
     },
     { id: "ownerName", numeric: false, label: "Record Owner" },
+    { id: "name", numeric: false, label: "Name" },
   ];
 
   return (
@@ -246,28 +246,11 @@ export function Table({
                       },
                     }}
                     onDoubleClick={() => {
-                      console.log({row})
-                      handleClickOpenEditDialog(row)}}
+                      console.log({ row })
+                      handleClickOpenEditDialog(row)
+                    }}
                     onClick={() => handleRowClick(row)}
                   >
-                    <TableCell
-                      size="small"
-                      sx={{
-                        cursor: "pointer",
-                        textDecoration: "underline",
-                        color: isSelected ? "white" : "primary.main",
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        row?.id &&
-                          window.open(
-                            `https://crm.zoho.com.au/crm/org7004396182/tab/CustomModule4/${row?.id}`,
-                            "_blank"
-                          );
-                      }}
-                    >
-                      {row.historyDetails?.name || row.name || "Unknown Name"}
-                    </TableCell>
                     <TableCell size="small">
                       <Box
                         sx={{
@@ -333,6 +316,24 @@ export function Table({
                     </TableCell>
                     <TableCell size="small">
                       {row.ownerName || "Unknown Owner"}
+                    </TableCell>
+                    <TableCell
+                      size="small"
+                      sx={{
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                        color: isSelected ? "white" : "primary.main",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        row?.id &&
+                          window.open(
+                            `https://crm.zoho.com.au/crm/org7004396182/tab/CustomModule4/${row?.id}`,
+                            "_blank"
+                          );
+                      }}
+                    >
+                      {row.historyDetails?.name || row.name || "Unknown Name"}
                     </TableCell>
                   </TableRow>
                 );
