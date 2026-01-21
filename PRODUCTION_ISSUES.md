@@ -135,6 +135,8 @@ Same for `resizeResp`, `downloadAttachmentResp`, `response` in loops, etc.
 | | `selectedRecordId` unused | `const [, setSelectedRecordId]` |
 | | `zohoLoaded`, `setZohoLoaded` unused | Remove state |
 | | `useEffect` deps for `fetchRLData` | `// eslint-disable-next-line react-hooks/exhaustive-deps` |
+| | `setCurrentContact` unused (but `currentContact` is used) | `// eslint-disable-next-line no-unused-vars -- setter not used but state value is needed` |
+| | `id != null` (loose equality) | Change to `id !== null && id !== undefined` |
 | **ApplicationTable.jsx** | `useEffect` unused (after removing a `useEffect`) | Remove `useEffect` from `import { useState, useEffect }` |
 | | `setCurrentGlobalContact`, `getCurrentContact` unused | Remove import |
 | | `mahadiContact`, its `useEffect` | Remove state and effect |
@@ -144,17 +146,24 @@ Same for `resizeResp`, `downloadAttachmentResp`, `response` in loops, etc.
 | | `contacts`, `setContacts` unused | Remove state |
 | | `==` in condition | Use `===` |
 | | `useEffect` deps (fetch + second effect) | `// eslint-disable-next-line react-hooks/exhaustive-deps` |
+| **Stakeholder.jsx** | `fetchStakeholders` causes useCallback deps to change | Wrap `fetchStakeholders` in `useCallback` with `[ZOHO]` deps |
 | **Dialog.js** | `Chip`, `CalendarMonthIcon`, `ApplicationTable`, `debounce` | Remove imports / `debounce` |
 | | `historyName`, `regarding`, `selectedType`, `selectedApplicationId` | `const [, setHistoryName]` etc. |
 | | `regarding` state, `handleRegardingChange` | Remove (use `formData.regarding`) |
 | | `resultOptions` useMemo | Remove (replaced by `getResultOptions`) |
 | | `deleteFileResp` | `await zohoApi.file.deleteAttachment(...)` |
 | | `useEffect` deps (form init, fetch history) | `// eslint-disable-next-line react-hooks/exhaustive-deps` |
+| | `selectedApplicationId` unused (only setter used) | `const [, setSelectedApplicationId]` (empty slot pattern) |
+| | `DialogTitle`, `DialogContentText` unused | Remove from imports |
+| | `updatedHistoryName` duplicate calculation | Remove unused duplicate variable |
+| | `adminUserId`, `otherUserId` unused | Remove unused variables |
+| | `handleApplicationSelect` unused (duplicate) | Remove function (actual one in ApplicationDialog) |
 | **RegardingField.jsx** | `Typography` unused | Remove from imports |
 | | `useEffect` deps | `// eslint-disable-next-line react-hooks/exhaustive-deps` |
 | **Table.js** | `handleRowClick` unused | Remove function |
 | **zohoApi/auth.js** | `resizeResp` | `await ZOHO.CRM.UI.Resize(...)` |
 | **zohoApi/file.js** | `downloadAttachmentById2`, inner `downloadFile`, `downloadAttachmentResp` | Remove whole `downloadAttachmentById2` |
+| | `sm != null` (loose equality) | Change to `sm !== null && sm !== undefined` |
 
 ---
 
@@ -195,4 +204,71 @@ Same for `resizeResp`, `downloadAttachmentResp`, `response` in loops, etc.
 
 ---
 
-*Last updated for migration-solution-history. Adapt file and symbol names to your project.*
+## 6. Recent Issues Fixed (Latest Build)
+
+### Issue 1: Unused State Setters with Used Values
+
+**Problem:**
+- `setCurrentContact` in App.js was marked as unused, but `currentContact` value is actually used in the code
+- `selectedApplicationId` in Dialog.js was marked as unused, but only the setter is used
+
+**Solution:**
+- For cases where the **value is used but setter is not**: Add eslint-disable comment explaining why:
+  ```javascript
+  // eslint-disable-next-line no-unused-vars -- setter not used but state value is needed
+  const [currentContact, setCurrentContact] = React.useState(null);
+  ```
+- For cases where **only the setter is used**: Use empty slot pattern:
+  ```javascript
+  const [, setSelectedApplicationId] = React.useState(null);
+  ```
+
+### Issue 2: Loose Equality (`!=` / `==`) in Null Checks
+
+**Problem:**
+- ESLint `eqeqeq` rule requires strict equality (`===` / `!==`)
+- Code used `!= null` which checks for both `null` and `undefined`, but ESLint wants explicit checks
+
+**Solution:**
+Replace loose equality with explicit strict checks:
+```javascript
+// Before
+if (sm != null) { ... }
+return id != null ? { id, name } : null;
+
+// After
+if (sm !== null && sm !== undefined) { ... }
+return id !== null && id !== undefined ? { id, name } : null;
+```
+
+**Files Fixed:**
+- `src/App.js` line 193: `id != null` → `id !== null && id !== undefined`
+- `src/zohoApi/file.js` line 50: `sm != null` → `sm !== null && sm !== undefined`
+
+### Issue 3: useCallback Dependency Issue
+
+**Problem:**
+- `fetchStakeholders` function in Stakeholder.jsx was causing `useCallback` dependencies to change on every render
+- This triggered `react-hooks/exhaustive-deps` warning
+
+**Solution:**
+Wrap `fetchStakeholders` in its own `useCallback`:
+```javascript
+// Before
+const fetchStakeholders = async (query) => { ... };
+const handleInputChangeWithDebounce = useCallback(
+  (event, newValue) => { ... },
+  [fetchStakeholders]  // This changes every render
+);
+
+// After
+const fetchStakeholders = useCallback(async (query) => { ... }, [ZOHO]);
+const handleInputChangeWithDebounce = useCallback(
+  (event, newValue) => { ... },
+  [fetchStakeholders]  // Now stable
+);
+```
+
+---
+
+*Last updated for migration-solutions-stakeholder-history. Adapt file and symbol names to your project.*
