@@ -12,7 +12,6 @@ import Paper from "@mui/material/Paper";
 import IconButton from "@mui/material/IconButton";
 import AttachmentIcon from "@mui/icons-material/Attachment";
 import CircularProgress from "@mui/material/CircularProgress";
-import { visuallyHidden } from "@mui/utils";
 import { useSnackbar } from "notistack";
 import { zohoApi } from "../../zohoApi";
 import DownloadIcon from "@mui/icons-material/Download";
@@ -137,7 +136,20 @@ function EnhancedTableHead({ order, orderBy, handleRequestSort }) {
               >
                 {headCell.label}
                 {orderBy === headCell.id ? (
-                  <Box component="span" sx={visuallyHidden}>
+                  <Box
+                    component="span"
+                    sx={{
+                      position: "absolute",
+                      width: "1px",
+                      height: "1px",
+                      padding: 0,
+                      margin: "-1px",
+                      overflow: "hidden",
+                      clip: "rect(0, 0, 0, 0)",
+                      whiteSpace: "nowrap",
+                      borderWidth: 0,
+                    }}
+                  >
                     {order === "desc"
                       ? "sorted descending"
                       : "sorted ascending"}
@@ -326,11 +338,13 @@ export function Table({
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        row?.id &&
+                        const historyId = row?.id || row?.historyDetails?.id;
+                        if (historyId) {
                           window.open(
-                            `https://crm.zoho.com.au/crm/org7004396182/tab/CustomModule4/${row?.id}`,
+                            `https://crm.zoho.com.au/crm/org7004396182/tab/CustomModule4/${historyId}`,
                             "_blank"
                           );
+                        }
                       }}
                     >
                       {row.historyDetails?.name || row.name || "Unknown Name"}

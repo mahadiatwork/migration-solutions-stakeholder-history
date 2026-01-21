@@ -7,28 +7,79 @@ export default function Stakeholder({ formData, handleInputChange, ZOHO, current
   const [inputValue, setInputValue] = useState("");
 
   const debounceTimeoutRef = useRef(null);
+  const expectedIdRef = useRef(null);
+  const lastFetchedIdRef = useRef(null);
 
   /**
-   * Effect 1: Prepopulate selectedStakeholder
+   * Effect 1: Prepopulate selectedStakeholder and fetch by id if name is missing
    * Priority order:
    * 1. If formData has a selected stakeholder, use that.
    * 2. Else, use currentModuleData (fallback).
+   * 3. If stakeholder has id but no name, fetch the Account record.
    */
   useEffect(() => {
-    if (formData?.stakeHolder) {
+    if (!formData?.stakeHolder) {
+      expectedIdRef.current = null;
+      lastFetchedIdRef.current = null;
+      if (currentModuleData) {
+        const stakeholderValue = {
+          id: currentModuleData.id,
+          name: currentModuleData.Account_Name,
+        };
+        setSelectedStakeholder(stakeholderValue);
+        setInputValue(currentModuleData.Account_Name || "");
+        // Sync to formData so it's included when saving
+        handleInputChange("stakeHolder", stakeholderValue);
+      } else {
+        setSelectedStakeholder(null);
+        setInputValue("");
+      }
+      return;
+    }
+
+    if (formData.stakeHolder.name) {
+      setSelectedStakeholder(formData.stakeHolder);
+      setInputValue(formData.stakeHolder.name);
+      return;
+    }
+
+    const id = formData.stakeHolder.id;
+    if (!id || !ZOHO) return;
+
+    if (lastFetchedIdRef.current === id) {
       setSelectedStakeholder(formData.stakeHolder);
       setInputValue(formData.stakeHolder.name || "");
-    } else if (currentModuleData) {
-      setSelectedStakeholder({
-        id: currentModuleData.id,
-        name: currentModuleData.Account_Name,
-      });
-      setInputValue(currentModuleData.Account_Name || "");
-    } else {
-      setSelectedStakeholder(null);
-      setInputValue("");
+      return;
     }
-  }, [formData, currentModuleData]);
+
+    lastFetchedIdRef.current = id;
+    expectedIdRef.current = id;
+
+    ZOHO.CRM.API.getRecord({
+      Entity: "Accounts",
+      RecordID: id,
+      approved: "both",
+    })
+      .then((response) => {
+        if (expectedIdRef.current !== id) return;
+        const name = response?.data?.[0]?.Account_Name || "";
+        if (name) {
+          const full = { id, name };
+          handleInputChange("stakeHolder", full);
+          setSelectedStakeholder(full);
+          setInputValue(name);
+        } else {
+          setSelectedStakeholder(formData.stakeHolder);
+          setInputValue("");
+        }
+      })
+      .catch((err) => {
+        if (expectedIdRef.current !== id) return;
+        console.error("Error fetching stakeholder by id:", err);
+        setSelectedStakeholder(formData.stakeHolder);
+        setInputValue("");
+      });
+  }, [formData, ZOHO, handleInputChange, currentModuleData]);
 
   /**
    * Fetch stakeholders from Zoho API based on query

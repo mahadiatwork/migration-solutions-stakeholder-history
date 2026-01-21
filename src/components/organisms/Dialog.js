@@ -8,7 +8,6 @@ import {
   Dialog as MUIDialog,
   Select,
   MenuItem,
-  Chip,
   FormControl,
   InputLabel,
   Snackbar,
@@ -20,6 +19,7 @@ import {
   Modal,
   Paper,
   Typography,
+  CircularProgress,
 } from "@mui/material";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
@@ -31,10 +31,8 @@ import { getRegardingOptions, getResultOptions } from "./helperFunc";
 import ContactField from "./ContactFields";
 import RegardingField from "./RegardingField";
 import IconButton from "@mui/material/IconButton"; // For the clickable icon button
-import CalendarMonthIcon from "@mui/icons-material/CalendarMonth"; // For the calendar icon
 import { styled } from "@mui/material/styles";
 import { zohoApi } from "../../zohoApi";
-import ApplicationTable from "./ApplicationTable";
 import ApplicationDialog from "./ApplicationTable";
 import Stakeholder from "../atoms/Stakeholder";
 import { Close } from "@mui/icons-material";
@@ -50,14 +48,6 @@ const VisuallyHiddenInput = styled("input")({
   whiteSpace: "nowrap",
   width: 1,
 });
-
-const debounce = (func, delay) => {
-  let timer;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => func(...args), delay);
-  };
-};
 
 const durationOptions = Array.from({ length: 24 }, (_, i) => (i + 1) * 10);
 
@@ -103,7 +93,7 @@ export function Dialog({
   setOpenApplicationDialog,
   currentModuleData,
 }) {
-  const [historyName, setHistoryName] = React.useState("");
+  const [, setHistoryName] = React.useState("");
   const [historyContacts, setHistoryContacts] = React.useState([]);
   const [selectedOwner, setSelectedOwner] = React.useState(
     ownerList?.find(
@@ -112,13 +102,11 @@ export function Dialog({
     loggedInUser ||
     null
   );
-  const [selectedType, setSelectedType] = React.useState("Meeting");
+  const [, setSelectedType] = React.useState("Meeting");
   const [loadedAttachmentFromRecord, setLoadedAttachmentFromRecord] =
     React.useState();
-  const [regarding, setRegarding] = React.useState(
-    selectedRowData?.regarding || ""
-  );
   const [formData, setFormData] = React.useState(selectedRowData || {}); // Form data state
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
   // console.log({ formData });
   const [snackbar, setSnackbar] = React.useState({
     open: false,
@@ -142,9 +130,11 @@ export function Dialog({
   React.useEffect(() => {
     let load = true;
     const getAttachment = async ({ rowData }) => {
+      // Use main record id (historyDetails.id) instead of junction row id
+      const historyId = rowData?.historyDetails?.id || rowData?.id;
       const { data } = await zohoApi.file.getAttachments({
         module: "History1",
-        recordId: rowData?.id,
+        recordId: historyId,
       });
       setFormData((prev) => ({
         ...prev,
@@ -153,13 +143,11 @@ export function Dialog({
       setLoadedAttachmentFromRecord(data);
       console.log("file data", data);
     };
-    if (selectedRowData?.id && load) {
+    if (selectedRowData && load) {
       load = false;
       getAttachment({ rowData: selectedRowData });
-      // getAttachment({
-      //   selectedRowData: { historyDetails: { id: "76775000001772113" } },
-      // });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when selectedRowData changes
   }, [selectedRowData]);
 
   // console.log({ selectedRowData })
@@ -167,18 +155,37 @@ export function Dialog({
   // Reinitialize dialog state when `openDialog` or `obj` changes
   React.useEffect(() => {
     if (openDialog) {
+      setIsSubmitting(false);
       console.log("same", selectedContacts);
-      setFormData({
-        Participants: selectedRowData?.Participants || [],
-        result: selectedRowData?.result || "Meeting Held",
-        type: selectedRowData?.type || "Meeting",
-        duration: selectedRowData?.duration || "60",
-        regarding: selectedRowData?.regarding || "",
-        details: selectedRowData?.details || "",
-        stakeHolder: selectedRowData?.stakeHolder || null,
-        date_time: selectedRowData?.date_time
-          ? dayjs(selectedRowData.date_time)
-          : dayjs(),
+      setFormData((prev) => {
+        // Initialize stakeholder: use selectedRowData if editing, otherwise use currentModuleData for new records
+        let stakeHolderValue = null;
+        if (selectedRowData?.stakeHolder && typeof selectedRowData.stakeHolder === "object" && selectedRowData.stakeHolder?.id != null) {
+          stakeHolderValue = selectedRowData.stakeHolder;
+        } else if (!selectedRowData && currentModuleData) {
+          // For new records, initialize from currentModuleData
+          stakeHolderValue = {
+            id: currentModuleData.id,
+            name: currentModuleData.Account_Name,
+          };
+        }
+
+        const base = {
+          Participants: selectedRowData?.Participants || [],
+          result: selectedRowData?.result || "Meeting Held",
+          type: selectedRowData?.type || "Meeting",
+          duration: selectedRowData?.duration || "60",
+          regarding: selectedRowData?.regarding || "",
+          details: selectedRowData?.details || "",
+          stakeHolder: stakeHolderValue,
+          date_time: selectedRowData?.date_time
+            ? dayjs(selectedRowData.date_time)
+            : dayjs(),
+        };
+        return {
+          ...base,
+          attachment: selectedRowData ? prev?.attachment : undefined,
+        };
       });
       setSelectedContacts(selectedContacts || []);
       setHistoryName(
@@ -198,7 +205,8 @@ export function Dialog({
       // Reset formData to avoid stale data
       setFormData({});
     }
-  }, [openDialog, selectedRowData, loggedInUser, currentContact]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- form init; ownerList, setSelectedContacts, ZOHO are stable
+  }, [openDialog, selectedRowData, loggedInUser, currentContact, currentModuleData]);
 
   React.useEffect(() => {
     const fetchHistoryData = async () => {
@@ -233,6 +241,7 @@ export function Dialog({
     if (openDialog) {
       fetchHistoryData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when openDialog or selectedRowData changes; ZOHO is stable
   }, [selectedRowData?.historyDetails, openDialog]);
 
   React.useEffect(() => {
@@ -242,16 +251,13 @@ export function Dialog({
     setHistoryName(names);
   }, [selectedContacts]);
 
-  const handleRegardingChange = (event) => {
-    setRegarding(event.target.value); // Update the state with user input
-  };
-
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    setIsSubmitting(true);
 
     let selectedParticipants = [];
 
@@ -279,11 +285,7 @@ export function Dialog({
         Array.isArray(formData.result) && formData.result.length > 0
           ? formData.result[0]
           : formData.result,
-      Stakeholder: formData.stakeHolder
-        ? formData.stakeHolder
-        : currentModuleData
-          ? { id: currentModuleData?.id, name: currentModuleData?.Account_Name }
-          : null,
+      Stakeholder: formData.stakeHolder?.id ? { id: formData.stakeHolder.id } : null,
       History_Type: formData.type || "",
       Duration: formData.duration ? String(formData.duration) : null,
       Date: formData.date_time
@@ -291,6 +293,7 @@ export function Dialog({
         : null,
     };
 
+    console.log({ finalData, formData });
 
     try {
       if (selectedRowData) {
@@ -306,6 +309,7 @@ export function Dialog({
         severity: "error",
       });
     } finally {
+      setIsSubmitting(false);
       handleCloseDialog();
     }
   };
@@ -324,11 +328,12 @@ export function Dialog({
       const createResponse = await ZOHO.CRM.API.insertRecord(createConfig);
       if (createResponse?.data[0]?.code === "SUCCESS") {
         const historyId = createResponse.data[0].details.id;
-        if (formData?.attachment) {
+        // Only upload if formData.attachment is actually a File object (user selected a file)
+        if (formData?.attachment instanceof File) {
           const fileResp = await zohoApi.file.uploadAttachment({
             module: "History1",
             recordId: historyId,
-            data: formData?.attachment,
+            data: formData.attachment,
           });
           console.log({ fileResp });
         }
@@ -426,19 +431,35 @@ export function Dialog({
       if (updateResponse?.data[0]?.code === "SUCCESS") {
         const historyId = selectedRowData?.id;
 
-        // Delete attachment
-        const deleteFileResp = await zohoApi.file.deleteAttachment({
-          module: "History1",
-          recordId: historyId,
-          attachment_id: loadedAttachmentFromRecord?.[0]?.id,
-        });
+        // Check if formData.attachment is a File object (new file selected) or just metadata (existing file)
+        const isNewFile = formData?.attachment instanceof File;
+        const hasExistingAttachment = loadedAttachmentFromRecord?.[0]?.id;
 
-        // Add new attachment
-        const uploadFileResp = await zohoApi.file.uploadAttachment({
-          module: "History1",
-          recordId: historyId,
-          data: formData?.attachment,
-        });
+        // Only delete if user selected a new file or explicitly removed the attachment
+        if (isNewFile && hasExistingAttachment) {
+          // Delete old attachment before uploading new one
+          await zohoApi.file.deleteAttachment({
+            module: "History1",
+            recordId: historyId,
+            attachment_id: loadedAttachmentFromRecord[0].id,
+          });
+        } else if (formData?.attachment === null && hasExistingAttachment) {
+          // User explicitly removed the attachment
+          await zohoApi.file.deleteAttachment({
+            module: "History1",
+            recordId: historyId,
+            attachment_id: loadedAttachmentFromRecord[0].id,
+          });
+        }
+
+        // Only upload if a new File object was selected
+        if (isNewFile) {
+          await zohoApi.file.uploadAttachment({
+            module: "History1",
+            recordId: historyId,
+            data: formData.attachment,
+          });
+        }
 
         // Fetch existing History_X_Contacts records
         const relatedRecordsResponse = await ZOHO.CRM.API.getRelatedRecords({
@@ -460,6 +481,29 @@ export function Dialog({
         const toAddContacts = selectedParticipants.filter(
           (contact) => !existingContactIds.includes(contact.id)
         );
+        const toUpdateContacts = existingContacts.filter(
+          (contact) => selectedContactIds.includes(contact.Contact_Details?.id)
+        );
+
+        // Update stakeholder on existing History_X_Contacts records
+        for (const contact of toUpdateContacts) {
+          try {
+            await ZOHO.CRM.API.updateRecord({
+              Entity: "History_X_Contacts",
+              RecordID: contact.id,
+              APIData: {
+                id: contact.id,
+                Stakeholder: finalData?.Stakeholder,
+              },
+              Trigger: ["workflow"],
+            });
+          } catch (error) {
+            console.error(
+              `Error updating stakeholder for History_X_Contacts record ID ${contact.id}:`,
+              error
+            );
+          }
+        }
 
         // Delete records for removed contacts
         for (const id of toDeleteContactIds) {
@@ -603,131 +647,6 @@ export function Dialog({
     "Other",
   ];
 
-  const resultOptions = React.useMemo(() => {
-    if (selectedType === "Meeting") {
-      return ["Meeting Held", "Meeting Not Held"];
-    }
-    if (selectedType === "To-Do") {
-      return ["To-do Done", "To-do Not Done"];
-    }
-    if (selectedType === "Appointment") {
-      return ["Appointment Completed", "Appointment Not Completed"];
-    }
-    if (selectedType === "Boardroom") {
-      return ["Boardroom - Completed", "Boardroom - Not Completed"];
-    }
-    if (selectedType === "Call Billing") {
-      return ["Call Billing - Completed", "  Call Billing - Not Completed"];
-    }
-    if (selectedType === "Email Billing") {
-      return ["Email Billing - Completed", "Email Billing - Not Completed"];
-    }
-    if (selectedType === "Initial Consultation") {
-      return [
-        "Initial Consultation - Completed",
-        "Initial Consultation - Not Completed",
-      ];
-    }
-    if (selectedType === "Call") {
-      return [
-        "Call Attempted",
-        " Call Completed",
-        " Call Left Message",
-        " Call Received",
-      ];
-    }
-    if (selectedType === "Mail") {
-      return ["Mail - Completed", "Mail - Not Completed"];
-    }
-    if (selectedType === "Meeting Billing") {
-      return ["Meeting Billing - Completed", "Meeting Billing - Not Completed"];
-    }
-    if (selectedType === "Personal Activity") {
-      return [
-        "Personal Activity - Completed",
-        "Personal Activity - Not Completed",
-        "Note",
-        "Mail Received",
-        "Mail Sent",
-        "Email Received",
-        "Courier Sent",
-        "Email Sent",
-        "Payment Received",
-      ];
-    }
-    if (selectedType === "Room 1") {
-      return ["Room 1 - Completed", "Room 1 - Not Completed"];
-    }
-    if (selectedType === "Room 2") {
-      return ["Room 2 - Completed", "Room 2 - Not Completed"];
-    }
-    if (selectedType === "Room 3") {
-      return ["Room 3 - Completed", "Room 3 - Not Completed"];
-    }
-    if (selectedType === "To Do Billing") {
-      return ["To Do Billing - Completed", "To Do Billing - Not Completed"];
-    }
-    if (selectedType === "Vacation") {
-      return [
-        "Vacation - Completed",
-        "Vacation - Not Completed",
-        "Vacation Cancelled",
-      ];
-    }
-    if (selectedType === "Other") {
-      return [
-        "Attachment",
-        "E-mail Attachment",
-        "E-mail Auto Attached",
-        "E-mail Sent",
-      ];
-    }
-
-    return [
-      "Call Attempted",
-      "Call Completed",
-      "Call Left Message",
-      "Call Received",
-      "Meeting Held",
-      "Meeting Not Held",
-      "To-do Done",
-      "To-do Not Done",
-      "Appointment Completed",
-      "Appointment Not Completed",
-      "Boardroom - Completed",
-      "Boardroom - Not Completed",
-      "Call Billing - Completed",
-      "Initial Consultation - Completed",
-      "Initial Consultation - Not Completed",
-      "Mail - Completed",
-      "Mail - Not Completed",
-      "Meeting Billing - Completed",
-      "Meeting Billing - Not Completed",
-      "Personal Activity - Completed",
-      "Personal Activity - Not Completed",
-      "Note",
-      "Mail Received",
-      "Mail Sent",
-      "Email Received",
-      "Courier Sent",
-      "Email Sent",
-      "Payment Received",
-      "Room 1 - Completed",
-      "Room 1 - Not Completed",
-      "Room 2 - Completed",
-      "Room 2 - Not Completed",
-      "Room 3 - Completed",
-      "Room 3 - Not Completed",
-      "To Do Billing - Completed",
-      "To Do Billing - Not Completed",
-      "Vacation - Completed",
-      "Vacation - Not Completed",
-      "Vacation Cancelled",
-      "Attachment",
-      "E-mail Attachment",
-    ];
-  }, [selectedType]);
-
   const [selectedApplicationId, setSelectedApplicationId] =
     React.useState(null);
 
@@ -799,7 +718,7 @@ export function Dialog({
   const [openConfirmDialog, setOpenConfirmDialog] = React.useState(false);
 
   const handleAttachmentDelete = async () => {
-    const deleteFileResp = await zohoApi.file.deleteAttachment({
+    await zohoApi.file.deleteAttachment({
       module: "History1",
       recordId: selectedRowData?.id,
       attachment_id: loadedAttachmentFromRecord?.[0]?.id,
@@ -1231,6 +1150,7 @@ export function Dialog({
                 onClick={handleDelete}
                 variant="outlined"
                 color="error"
+                disabled={isSubmitting}
                 sx={{
                   fontSize: "9pt",
                   marginLeft: "8px",
@@ -1244,6 +1164,7 @@ export function Dialog({
                 onClick={handleMoveToApplication}
                 variant="outlined"
                 color="success"
+                disabled={isSubmitting}
                 sx={{
                   fontSize: "9pt",
                   marginLeft: "8px",
@@ -1276,12 +1197,19 @@ export function Dialog({
             <Button
               onClick={handleCloseDialog}
               variant="outlined"
+              disabled={isSubmitting}
               sx={{ fontSize: "9pt" }}
             >
               Cancel
             </Button>
-            <Button type="submit" variant="contained" sx={{ fontSize: "9pt" }}>
-              {buttonText}
+            <Button 
+              type="submit" 
+              variant="contained" 
+              disabled={isSubmitting}
+              sx={{ fontSize: "9pt", display: "flex", alignItems: "center", gap: 1 }}
+            >
+              {isSubmitting && <CircularProgress size={16} />}
+              {isSubmitting ? "Saving..." : buttonText}
             </Button>
           </Box>
         </DialogActions>
