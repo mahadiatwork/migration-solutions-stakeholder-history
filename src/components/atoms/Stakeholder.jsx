@@ -84,7 +84,7 @@ export default function Stakeholder({ formData, handleInputChange, ZOHO, current
   /**
    * Fetch stakeholders from Zoho API based on query
    */
-  const fetchStakeholders = async (query) => {
+  const fetchStakeholders = useCallback(async (query) => {
     if (!ZOHO || !query.trim()) return;
 
     try {
@@ -104,7 +104,7 @@ export default function Stakeholder({ formData, handleInputChange, ZOHO, current
     } catch (error) {
       console.error("Error fetching stakeholders:", error);
     }
-  };
+  }, [ZOHO]);
 
   /**
    * Debounced input change handler

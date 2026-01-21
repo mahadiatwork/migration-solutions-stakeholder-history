@@ -14,8 +14,6 @@ import {
   Alert,
   Grid,
   InputAdornment,
-  DialogTitle,
-  DialogContentText,
   Modal,
   Paper,
   Typography,
@@ -375,17 +373,6 @@ export function Dialog({
           severity: "success",
         });
 
-        // Ensure selectedParticipants is a valid array
-        const updatedHistoryName = (Array.isArray(selectedParticipants) && selectedParticipants.length > 0)
-          ? selectedParticipants.map((c) => c?.Full_Name).join(", ")
-          : (formData?.Stakeholder?.name) // Check if stakeHolder exists and has a name
-            ? formData.Stakeholder.name
-            : (currentModuleData?.Account_Name) // Check if currentModuleData has Account_Name
-              ? currentModuleData.Account_Name
-              : "Unknown"; // Fallback name if everything else is empty
-
-
-
         // Notify parent about the created record
         const updatedRecord = {
           ...finalData,
@@ -413,9 +400,6 @@ export function Dialog({
     selectedParticipants
   ) => {
     try {
-      // 76775000000272001
-      const adminUserId = "76775000000272001";
-      const otherUserId = "76775000000809089";
       const updateConfig = {
         Entity: "History1",
         RecordID: finalData?.id,
@@ -649,66 +633,6 @@ export function Dialog({
 
   const [selectedApplicationId, setSelectedApplicationId] =
     React.useState(null);
-
-  const handleApplicationSelect = async () => {
-    if (!selectedApplicationId) {
-      setSnackbar({
-        open: true,
-        message: "Please select an application.",
-        severity: "warning",
-      });
-      return;
-    }
-
-    try {
-      // Delete the current history and associated contacts
-      await handleDelete();
-      // Create a new application history in the selected application
-      const createApplicationHistory = await ZOHO.CRM.API.insertRecord({
-        Entity: "Application History",
-        APIData: {
-          Name: formData.Name,
-          Application: { id: selectedApplicationId },
-          Details: formData.details,
-          Date: formData.date_time,
-        },
-        Trigger: ["workflow"],
-      });
-
-      if (createApplicationHistory?.data[0]?.code === "SUCCESS") {
-        const newHistoryId = createApplicationHistory.data[0].details.id;
-
-        // Create ApplicationxContacts for all associated contacts
-        for (const contact of historyContacts) {
-          await ZOHO.CRM.API.insertRecord({
-            Entity: "ApplicationxContacts",
-            APIData: {
-              Application_History: { id: newHistoryId },
-              Contact: { id: contact.id },
-            },
-            Trigger: ["workflow"],
-          });
-        }
-
-        setSnackbar({
-          open: true,
-          message: "History moved successfully!",
-          severity: "success",
-        });
-      } else {
-        throw new Error("Failed to create new application history.");
-      }
-    } catch (error) {
-      console.error("Error moving history:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to move history.",
-        severity: "error",
-      });
-    } finally {
-      handleApplicationDialogClose();
-    }
-  };
 
   const handleApplicationDialogClose = () => {
     setOpenApplicationDialog(false);
