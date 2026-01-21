@@ -82,6 +82,7 @@ const App = () => {
   const [keyword, setKeyword] = React.useState("");
   const [loggedInUser, setLoggedInUser] = React.useState(null);
   const [selectedRowData, setSelectedRowData] = React.useState(null);
+  // eslint-disable-next-line no-unused-vars -- setter not used but state value is needed
   const [currentContact, setCurrentContact] = React.useState(null);
   const [regarding, setRegarding] = React.useState("");
   const [details, setDetails] = React.useState("");
@@ -189,7 +190,7 @@ const App = () => {
           const id = flatId ?? (nested && typeof nested === "object" ? nested.id : undefined) ?? (junction && typeof junction === "object" ? junction.id : undefined);
           const rawName = flatName ?? (nested && typeof nested === "object" ? (nested.Account_Name ?? nested.name) : undefined) ?? (junction && typeof junction === "object" ? (junction.Account_Name ?? junction.name) : undefined);
 
-          return id != null ? { id, name: rawName || "" } : null;
+          return id !== null && id !== undefined ? { id, name: rawName || "" } : null;
         })(),
         // Participants:
       }));

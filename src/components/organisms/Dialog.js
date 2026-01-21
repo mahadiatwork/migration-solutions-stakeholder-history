@@ -631,7 +631,7 @@ export function Dialog({
     "Other",
   ];
 
-  const [selectedApplicationId, setSelectedApplicationId] =
+  const [, setSelectedApplicationId] =
     React.useState(null);
 
   const handleApplicationDialogClose = () => {

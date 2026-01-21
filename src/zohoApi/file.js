@@ -47,7 +47,7 @@ async function getAttachments({ module, recordId }) {
     const details = getAttachmentsResp?.details;
 
     let list = [];
-    if (sm !== "" && sm != null) {
+    if (sm !== "" && sm !== null && sm !== undefined) {
       const parsed = typeof sm === "string"
         ? (() => { try { return JSON.parse(sm); } catch { return {}; } })()
         : sm;
