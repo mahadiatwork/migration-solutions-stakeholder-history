@@ -82,7 +82,7 @@ const App = () => {
   const [keyword, setKeyword] = React.useState("");
   const [loggedInUser, setLoggedInUser] = React.useState(null);
   const [selectedRowData, setSelectedRowData] = React.useState(null);
-  const [, setCurrentContact] = React.useState(null);
+  const [currentContact, setCurrentContact] = React.useState(null);
   const [regarding, setRegarding] = React.useState("");
   const [details, setDetails] = React.useState("");
   const [selectedContacts, setSelectedContacts] = React.useState([]);
