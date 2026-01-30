@@ -1,0 +1,75 @@
+// =============================================================================
+// Stakeholder History - COQL v8 Deluge Test Scripts
+// =============================================================================
+// Use these scripts to verify COQL queries in Zoho Deluge before/after widget
+// implementation. Adjust recordId, module, and fields per your Zoho schema.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// WORKING QUERY (verified) - Account parent (Stakeholder = accountId)
+// -----------------------------------------------------------------------------
+// Use expanded field paths: Owner.first_name, Owner.last_name,
+// Contact_History_Info.X, Contact_Details.Full_Name
+
+queryMap = Map();
+queryMap.put("select_query","select Name,id,Contact_History_Info.id,Contact_History_Info.Name,Owner.first_name,Owner.last_name,Contact_Details.id,Contact_Details.Full_Name,Contact_History_Info.History_Type,Contact_History_Info.History_Result,Contact_History_Info.Duration,Contact_History_Info.Regarding,Contact_History_Info.History_Details_Plain,Contact_History_Info.Date from History_X_Contacts where Stakeholder = '76775000002376022' LIMIT 0, 2000");
+response = invokeurl
+[
+	url :"https://www.zohoapis.com.au/crm/v8/coql"
+	type :POST
+	parameters:queryMap.toString()
+	connection:"zoho_crm_conn"
+];
+
+info response;
+
+
+// -----------------------------------------------------------------------------
+// Option A: When parent is CONTACT
+// -----------------------------------------------------------------------------
+// Related list "Stakeholder_History" on Contact returns History_X_Contacts
+// junction records where Contact_Details = contactId
+
+contactId = "YOUR_CONTACT_RECORD_ID";  // Replace with actual Contact ID
+limit = 2000;
+offset = 0;
+
+selectQuery = "select Name,id,Contact_History_Info.id,Contact_History_Info.Name,Owner.first_name,Owner.last_name,Contact_Details.id,Contact_Details.Full_Name,Contact_History_Info.History_Type,Contact_History_Info.History_Result,Contact_History_Info.Duration,Contact_History_Info.Regarding,Contact_History_Info.History_Details_Plain,Contact_History_Info.Date from History_X_Contacts where Contact_Details = '" + contactId + "' LIMIT " + offset + ", " + limit;
+
+paramMap = Map();
+paramMap.put("select_query", selectQuery);
+
+response = invokeurl
+[
+	url :"https://www.zohoapis.com.au/crm/v8/coql"
+	type :POST
+	parameters :paramMap.toString()
+	connection :"zoho_crm_conn" 
+];
+
+info response;
+
+
+// -----------------------------------------------------------------------------
+// Option B: When parent is ACCOUNT
+// -----------------------------------------------------------------------------
+// When widget is embedded on Account record, use Stakeholder = accountId
+
+accountId = "YOUR_ACCOUNT_RECORD_ID";  // Replace with actual Account ID
+limit = 2000;
+offset = 0;
+
+selectQuery = "select Name,id,Contact_History_Info.id,Contact_History_Info.Name,Owner.first_name,Owner.last_name,Contact_Details.id,Contact_Details.Full_Name,Contact_History_Info.History_Type,Contact_History_Info.History_Result,Contact_History_Info.Duration,Contact_History_Info.Regarding,Contact_History_Info.History_Details_Plain,Contact_History_Info.Date from History_X_Contacts where Stakeholder = '" + accountId + "' LIMIT " + offset + ", " + limit;
+
+paramMap = Map();
+paramMap.put("select_query", selectQuery);
+
+response = invokeurl
+[
+	url :"https://www.zohoapis.com.au/crm/v8/coql"
+	type :POST
+	parameters :paramMap.toString()
+	connection :"zoho_crm_conn" 
+];
+
+info response;

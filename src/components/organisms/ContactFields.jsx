@@ -52,12 +52,17 @@ export default function ContactField({
 
   useEffect(() => {
     const fetchParticipantsDetails = async () => {
-      if (selectedRowData?.id && ZOHO) {
+      // Use History1 record id (history_id), not junction id - getRelatedRecords expects History1 id
+      const historyId =
+        selectedRowData?.history_id ||
+        selectedRowData?.historyDetails?.id ||
+        selectedRowData?.id;
+      if (historyId && ZOHO) {
         try {
           // Fetch related list data to get contact IDs
           const relatedListData = await ZOHO.CRM.API.getRelatedRecords({
             Entity: "History1",
-            RecordID: selectedRowData?.id,
+            RecordID: historyId,
             RelatedList: "Contacts3",
             page: 1,
             per_page: 200,
@@ -110,8 +115,8 @@ export default function ContactField({
     };
 
     fetchParticipantsDetails();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; ZOHO, selectedRowData are stable
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when selectedRowData changes (e.g. different row for edit)
+  }, [selectedRowData?.history_id, selectedRowData?.historyDetails?.id, selectedRowData?.id]);
 
   const handleOpen = () => {
     setFilteredContacts([]);

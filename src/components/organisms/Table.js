@@ -40,22 +40,43 @@ const DownloadButton = ({ rowId, rowIcon, isSelected }) => {
       sx={{ fontSize: "12pt" }}
       disableRipple
       onClick={async () => {
+        if (!rowId) {
+          enqueueSnackbar("Record ID missing.", { variant: "error" });
+          return;
+        }
         setWaitingForDownload(true);
-        const { data } = await zohoApi.file.getAttachments({
-          module: "History1",
-          recordId: rowId,
-        });
-        if (data?.length > 0) {
-          const downloadResp = await zohoApi.file.downloadAttachmentById({
+        try {
+          const { data, error } = await zohoApi.file.getAttachments({
             module: "History1",
             recordId: rowId,
-            attachmentId: data?.[0]?.id,
-            fileName: data?.[0]?.File_Name,
           });
-          console.log({ data, rowId, downloadResp });
-          setWaitingForDownload(false);
-        } else {
-          enqueueSnackbar("No file.", { variant: "error" });
+          if (error) {
+            enqueueSnackbar("Failed to fetch attachments.", { variant: "error" });
+            return;
+          }
+          if (data?.length > 0) {
+            const attachmentId = data[0]?.id;
+            const fileName = data[0]?.File_Name || "attachment";
+            if (!attachmentId) {
+              enqueueSnackbar("Attachment ID missing.", { variant: "error" });
+              return;
+            }
+            const downloadResp = await zohoApi.file.downloadAttachmentById({
+              module: "History1",
+              recordId: rowId,
+              attachmentId,
+              fileName,
+            });
+            if (downloadResp?.error) {
+              enqueueSnackbar("Download failed.", { variant: "error" });
+            }
+          } else {
+            enqueueSnackbar("No attachment found.", { variant: "info" });
+          }
+        } catch (err) {
+          console.error("Download error:", err);
+          enqueueSnackbar("Download failed.", { variant: "error" });
+        } finally {
           setWaitingForDownload(false);
         }
       }}
@@ -320,9 +341,10 @@ export function Table({
                     </TableCell>
                     <TableCell size="small">
                       <DownloadButton
-                        // rowId={row?.id}
                         isSelected={isSelected}
-                        rowId={row?.id}
+                        rowId={
+                          row?.history_id || row?.historyDetails?.id || row?.id
+                        }
                         rowIcon={<DownloadIcon />}
                       />
                     </TableCell>
@@ -338,7 +360,8 @@ export function Table({
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        const historyId = row?.id || row?.historyDetails?.id;
+                        const historyId =
+                          row?.history_id || row?.historyDetails?.id || row?.id;
                         if (historyId) {
                           window.open(
                             `https://crm.zoho.com.au/crm/org7004396182/tab/CustomModule4/${historyId}`,

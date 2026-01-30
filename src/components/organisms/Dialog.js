@@ -164,7 +164,13 @@ export function Dialog({
           // For new records, initialize from currentModuleData
           stakeHolderValue = {
             id: currentModuleData.id,
-            name: currentModuleData.Account_Name,
+            name: currentModuleData.Account_Name ?? currentModuleData.name,
+          };
+        } else if (selectedRowData && currentModuleData && currentModuleData.Account_Name) {
+          // Edit: row may lack stakeHolder (COQL excludes it); fallback to current Account
+          stakeHolderValue = {
+            id: currentModuleData.id,
+            name: currentModuleData.Account_Name ?? currentModuleData.name,
           };
         }
 
@@ -208,22 +214,26 @@ export function Dialog({
 
   React.useEffect(() => {
     const fetchHistoryData = async () => {
-      if (selectedRowData?.id) {
+      // Use History1 record id (history_id), not junction id - getRelatedRecords expects History1 id
+      const historyId =
+        selectedRowData?.history_id ||
+        selectedRowData?.historyDetails?.id ||
+        selectedRowData?.id;
+      if (historyId) {
         try {
           const data = await ZOHO.CRM.API.getRelatedRecords({
             Entity: "History1",
-            RecordID: selectedRowData?.id,
+            RecordID: historyId,
             RelatedList: "Contacts3",
             page: 1,
             per_page: 200,
           });
 
-          const contactDetailsArray = data.data.map((record) => ({
-            Full_Name: record.Contact_Details.name,
-            id: record.Contact_Details.id,
-          }));
+          const contactDetailsArray = (data?.data || []).map((record) => ({
+            Full_Name: record.Contact_Details?.name ?? record.Contact_Details?.Full_Name,
+            id: record.Contact_Details?.id,
+          })).filter((c) => c.id);
 
-          console.log({ contactDetailsArray });
           setHistoryContacts(contactDetailsArray);
           setSelectedContacts(contactDetailsArray);
           setFormData((prevFormData) => ({
@@ -240,7 +250,7 @@ export function Dialog({
       fetchHistoryData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run when openDialog or selectedRowData changes; ZOHO is stable
-  }, [selectedRowData?.historyDetails, openDialog]);
+  }, [selectedRowData?.history_id, selectedRowData?.historyDetails?.id, selectedRowData?.id, openDialog]);
 
   React.useEffect(() => {
     const names = selectedContacts
@@ -278,7 +288,7 @@ export function Dialog({
       Name: updatedHistoryName,
       History_Details_Plain: formData.details,
       Regarding: formData.regarding,
-      Owner: selectedOwner,
+      Owner: selectedOwner?.id ? { id: selectedOwner.id } : undefined,
       History_Result:
         Array.isArray(formData.result) && formData.result.length > 0
           ? formData.result[0]
@@ -399,21 +409,31 @@ export function Dialog({
     finalData,
     selectedParticipants
   ) => {
+    // Use History1 record id (history_id), not junction id - updateRecord expects History1 id
+    const historyId =
+      selectedRowData?.history_id ||
+      selectedRowData?.historyDetails?.id ||
+      selectedRowData?.id;
+
     try {
+      // Build APIData for History1 - exclude id from finalData (it's junction id); use historyId only
+      const { id: _omitId, ...restFinalData } = finalData;
       const updateConfig = {
         Entity: "History1",
-        RecordID: finalData?.id,
+        RecordID: historyId,
         APIData: {
-          id: finalData?.id,
-          ...finalData,
+          id: historyId,
+          ...restFinalData,
         },
         Trigger: ["workflow"],
       };
 
       const updateResponse = await ZOHO.CRM.API.updateRecord(updateConfig);
 
-      if (updateResponse?.data[0]?.code === "SUCCESS") {
-        const historyId = selectedRowData?.id;
+      const updateCode = updateResponse?.data?.[0]?.code ?? updateResponse?.details?.[0]?.code;
+      const updateMessage = updateResponse?.data?.[0]?.message ?? updateResponse?.details?.[0]?.message ?? updateResponse?.message;
+
+      if (updateCode === "SUCCESS") {
 
         // Check if formData.attachment is a File object (new file selected) or just metadata (existing file)
         const isNewFile = formData?.attachment instanceof File;
@@ -547,7 +567,9 @@ export function Dialog({
           severity: "success",
         });
       } else {
-        throw new Error("Failed to update record.");
+        const errMsg = updateMessage || updateResponse?.data?.[0]?.details?.message || "Failed to update record.";
+        console.error("Zoho update failed:", { updateResponse, updateCode, updateMessage });
+        throw new Error(errMsg);
       }
     } catch (error) {
       console.error("Error updating history:", error);
@@ -558,12 +580,18 @@ export function Dialog({
   const handleDelete = async () => {
     if (!selectedRowData) return; // No record selected
 
+    // Use History1 record id (history_id), not junction id
+    const historyId =
+      selectedRowData?.history_id ||
+      selectedRowData?.historyDetails?.id ||
+      selectedRowData?.id;
+
     try {
       // Delete related records first
-      if (selectedRowData?.id) {
+      if (historyId) {
         const relatedRecordsResponse = await ZOHO.CRM.API.getRelatedRecords({
           Entity: "History1",
-          RecordID: selectedRowData?.id,
+          RecordID: historyId,
           RelatedList: "Contacts3",
         });
 
@@ -581,7 +609,7 @@ export function Dialog({
       // Delete the main record
       const response = await ZOHO.CRM.API.deleteRecord({
         Entity: "History1",
-        RecordID: selectedRowData?.id,
+        RecordID: historyId,
       });
 
       if (response?.data[0]?.code === "SUCCESS") {
@@ -642,9 +670,13 @@ export function Dialog({
   const [openConfirmDialog, setOpenConfirmDialog] = React.useState(false);
 
   const handleAttachmentDelete = async () => {
+    const historyId =
+      selectedRowData?.history_id ||
+      selectedRowData?.historyDetails?.id ||
+      selectedRowData?.id;
     await zohoApi.file.deleteAttachment({
       module: "History1",
-      recordId: selectedRowData?.id,
+      recordId: historyId,
       attachment_id: loadedAttachmentFromRecord?.[0]?.id,
     });
     // Update state to remove attachment
