@@ -24,21 +24,23 @@ This document adapts the patterns from **COQL_AND_FILTERING_IMPLEMENTATION_PLAN.
 
 ## Current Data Structure (from App.js)
 
-### Row Mapping (tempData)
+### Row Mapping (tempData) – Current Implementation
 
 | UI Field | Source | Notes |
 |----------|--------|-------|
-| `name` | `obj?.Name` | Display name |
-| `id` | `obj?.id` | Record ID (junction or History1 – verify) |
-| `date_time` | `obj?.Date` | |
-| `type` | `obj?.History_Type` | |
-| `result` | `obj?.History_Result` | |
-| `duration` | `obj?.Duration` | |
-| `regarding` | `obj?.Regarding` | |
-| `details` | `obj?.History_Details_Plain` | |
-| `ownerName` | `obj?.Owner?.name` | |
-| `historyDetails` | `obj?.Contact_History_Info` | History1 record reference |
-| `stakeHolder` | `Contact_History_Info.Stakeholder` or `obj?.Stakeholder` | Lookup; supports flat, nested, junction shapes |
+| `name` | `Contact_History_Info.Name` > `Contact_Details.Full_Name` > `obj?.Name` | Prefer History name; junction Name may be numeric |
+| `id` | `obj?.id` (junction) → after dedup: `history_id` | Junction id; after dedup use history_id as row id |
+| `history_id` | `Contact_History_Info.id` | **Use for all History1 API calls** (contacts, attachments, update, delete) |
+| `Participants` | Built from `Contact_Details.id` + `Contact_Details.Full_Name` | One per junction row; merged when deduping |
+| `date_time` | `Contact_History_Info.Date` or `obj?.Date` | Support expanded COQL paths |
+| `type` | `Contact_History_Info.History_Type` or `obj?.History_Type` | |
+| `result` | `Contact_History_Info.History_Result` or `obj?.History_Result` | |
+| `duration` | `Contact_History_Info.Duration` or `obj?.Duration` | |
+| `regarding` | `Contact_History_Info.Regarding` or `obj?.Regarding` | |
+| `details` | `Contact_History_Info.History_Details_Plain` or `obj?.History_Details_Plain` | |
+| `ownerName` | `getOwnerDisplayName(owner, validUsers)` | Owner from `Owner.first_name` + `Owner.last_name` or `obj?.Owner` |
+| `historyDetails` | `obj?.Contact_History_Info` with `id: historyId` | History1 record reference |
+| `stakeHolder` | From COQL if present; else from current Account when `module === "Accounts"` | See Part 6.3 |
 
 ### Current Filter State
 
@@ -88,14 +90,17 @@ selectQuery = "SELECT id, Name, Date, History_Type, History_Result, Regarding, H
 
 ### 1.2 COQL Query Options (To Be Verified)
 
-**Option A – Query History_X_Contacts (if parent is Contact):**
+**Option A – Query History_X_Contacts (verified working – use expanded paths):**
 
 ```sql
-SELECT id, Name, Date, History_Type, History_Result, Regarding, History_Details_Plain, Owner, Contact_History_Info, Stakeholder, Duration
+SELECT Name, id, Contact_History_Info.id, Contact_History_Info.Name, Owner.first_name, Owner.last_name, Contact_Details.id, Contact_Details.Full_Name, Contact_History_Info.History_Type, Contact_History_Info.History_Result, Contact_History_Info.Duration, Contact_History_Info.Regarding, Contact_History_Info.History_Details_Plain, Contact_History_Info.Date
 FROM History_X_Contacts
 WHERE Contact_Details = '{recordId}'
+-- OR WHERE Stakeholder = '{recordId}' when parent is Account
 LIMIT {offset}, {limit}
 ```
+
+**Note:** Use expanded paths (`Contact_History_Info.X`, `Owner.first_name`, `Contact_Details.id`). See `STAKEHOLDER_HISTORY_COQL_DELUGE.txt` for the exact working query.
 
 **Option B – Query History1 (if relationship allows):**
 
@@ -252,13 +257,14 @@ ownerName: getOwnerDisplayName(obj?.Owner, validUsers),
 
 ### 1.4 Checklist (COQL v8)
 
-- [ ] Verify in Zoho/Deluge: module name, WHERE clause, and field support for COQL
-- [ ] Add `fetchStakeholderHistoryViaCoqlV8` to `src/zohoApi/record.js`
-- [ ] Update `fetchRLData` in App.js to use COQL v8 with fallback
-- [ ] Add `preserveFieldsForRecordId` for stakeholder if COQL excludes it
-- [ ] Add `getOwnerDisplayName` if Owner returns only ID
-- [ ] Handle both `response.data` and `response.details.statusMessage` shapes
-- [ ] Test with a Contact/Account that has 200+ history records
+- [x] Verify in Zoho/Deluge: module name, WHERE clause, and field support for COQL
+- [x] Add `fetchStakeholderHistoryViaCoqlV8` to `src/zohoApi/record.js`
+- [x] Update `fetchRLData` in App.js to use COQL v8 with fallback
+- [x] Add `preserveFieldsForRecordId` for stakeholder if COQL excludes it
+- [x] Add `getOwnerDisplayName` if Owner returns only ID (expanded paths)
+- [x] Handle both `response.data` and `response.details.statusMessage` shapes
+- [x] Use expanded COQL paths (Contact_History_Info.X, Owner.first_name, Contact_Details.id)
+- [x] Add deduplication by history_id (one row per History)
 
 ---
 
@@ -396,11 +402,12 @@ if (dateRange?.startDate && dateRange?.endDate) {
 
 ### 2.3 Checklist (Custom Filtering)
 
-- [ ] Refactor `filteredData` to `React.useMemo` with correct dependencies
-- [ ] Add `getActiveFilterNames()` helper
-- [ ] Add Filter Summary UI above table
-- [ ] Add `handleClearFilters` and "Clear Filters" button
-- [ ] Use explicit date parsing for custom range
+- [x] Refactor `filteredData` to `React.useMemo` with correct dependencies
+- [x] Add `getActiveFilterNames()` helper
+- [x] Add Filter Summary UI above table
+- [x] Add `handleClearFilters` and "Clear Filters" button
+- [x] Use explicit date parsing for custom range (YYYY-MM-DD)
+- [x] Add `getOptionLabel` to Dates Autocomplete (fix [object Object] for custom range)
 - [ ] (Optional) Multi-select type filter
 - [ ] (Optional) Flexible user matching
 
@@ -410,8 +417,12 @@ if (dateRange?.startDate && dateRange?.endDate) {
 
 | File | Changes |
 |------|---------|
-| `src/zohoApi/record.js` | Add `fetchStakeholderHistoryViaCoqlV8`; export from record API |
-| `src/App.js` | Use COQL v8 in `fetchRLData` (with fallback); memoize `filteredData`; add filter summary, `getActiveFilterNames`, `handleClearFilters`; add `preserveFieldsForRecordId`; add `getOwnerDisplayName` if needed |
+| `src/zohoApi/record.js` | Add `fetchStakeholderHistoryViaCoqlV8` with expanded COQL paths; export from record API |
+| `src/App.js` | Use COQL v8 in `fetchRLData` (with fallback); memoize `filteredData`; add filter summary, `getActiveFilterNames`, `handleClearFilters`; add `preserveFieldsForRecordId`; add `getOwnerDisplayName`; row mapping for expanded paths; stakeholder from Account; Participants; deduplication by history_id; Dates `getOptionLabel`; pass `currentModuleData` to Edit dialog |
+| `src/components/organisms/Dialog.js` | Use `history_id` for fetchHistoryData, updateHistory, handleDelete, handleAttachmentDelete; exclude junction id from APIData; Owner as `{ id }`; stakeHolder fallback from currentModuleData |
+| `src/components/organisms/ContactFields.jsx` | Use `history_id` for fetchParticipantsDetails; fix useEffect deps |
+| `src/components/organisms/Table.js` | DownloadButton uses `history_id`; error handling for download |
+| `src/zohoApi/file.js` | Safe filename fallback; return error from `downloadAttachmentById` |
 | `src/config/config.js` | No change (AU + conn_name already correct) |
 
 ---
@@ -454,16 +465,153 @@ if (dateRange?.startDate && dateRange?.endDate) {
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| COQL v8 (2000 records) | To implement | **Verify schema first** (History_X_Contacts vs History1, WHERE clause) |
-| Fallback to getRelatedRecords | To implement | On COQL failure |
-| preserveFieldsForRecordId | To implement | For stakeholder when COQL excludes it |
-| getOwnerDisplayName | To implement | If Owner returns only ID |
-| Memoized filtering | To implement | useMemo with deps |
-| Filter summary | To implement | Total count + active filter names |
-| Clear filters | To implement | Reset all filter state |
-| Explicit date parsing | To implement | For custom range |
+| COQL v8 (2000 records) | ✓ Implemented | Use expanded paths; see STAKEHOLDER_HISTORY_COQL_DELUGE.txt |
+| Fallback to getRelatedRecords | ✓ Implemented | On COQL failure |
+| preserveFieldsForRecordId | ✓ Implemented | For stakeholder when COQL excludes it |
+| getOwnerDisplayName | ✓ Implemented | For Owner.first_name + Owner.last_name |
+| Memoized filtering | ✓ Implemented | useMemo with deps |
+| Filter summary | ✓ Implemented | Total count + active filter names |
+| Clear filters | ✓ Implemented | Reset all filter state |
+| Explicit date parsing | ✓ Implemented | YYYY-MM-DD for custom range |
+| Deduplication by history_id | ✓ Implemented | One row per History; merge participants |
+| Dates getOptionLabel | ✓ Implemented | Fix [object Object] for custom range |
+| Stakeholder from Account | ✓ Implemented | When COQL excludes Stakeholder |
+| history_id for History1 APIs | ✓ Implemented | Contacts, attachments, update, delete |
+| Contact_History_Info.Name | ✓ Implemented | Prefer over junction Name (number) |
+| Owner as { id } for update | ✓ Implemented | Zoho lookup format |
 | Multi-select type | Optional | Enhance type filter |
 
 ---
 
-*Adapted from COQL_AND_FILTERING_IMPLEMENTATION_PLAN.md for migration-solutions-stakeholder-history. Schema verification in Zoho/Deluge is required before COQL implementation.*
+## Part 6: Post-Implementation Issues & Fixes (Lessons Learned)
+
+This section documents issues encountered after implementation and how they were fixed. **Use this as a reference when implementing similar solutions in other apps.**
+
+### 6.1 COQL Query – Wrong Field Structure
+
+| Aspect | Issue | Fix |
+|--------|-------|-----|
+| **Problem** | Initial COQL used flat field names (`Date`, `History_Type`, `Owner`) which did not match the working Deluge query. COQL may return different shapes. | Use **expanded field paths** matching the verified Deluge query. |
+| **Working query** | `Contact_History_Info.X`, `Owner.first_name`, `Owner.last_name`, `Contact_Details.Full_Name` | See `STAKEHOLDER_HISTORY_COQL_DELUGE.txt` for the exact working query. |
+| **Row mapping** | Must support both flat (getRelatedRecords fallback) and expanded COQL paths. | Use fallback chain: `obj?.Date ?? obj?.["Contact_History_Info.Date"] ?? obj?.Contact_History_Info?.Date` |
+
+**Key takeaway:** Always verify the COQL query in Deluge first. Use expanded paths (`Lookup.Field`) when the API returns them that way.
+
+---
+
+### 6.2 [object Object] in Dates Filter (Custom Range)
+
+| Aspect | Issue | Fix |
+|--------|-------|-----|
+| **Problem** | When applying Custom Range, `dateRange` became `{ startDate, endDate }` with no `label`. MUI Autocomplete rendered it as `[object Object]`. | Add `getOptionLabel` to the Dates Autocomplete. |
+| **Fix** | | `getOptionLabel={(option) => { if (option?.label) return option.label; if (option?.startDate && option?.endDate) return \`${dayjs(option.startDate).format("DD/MM/YYYY")} - ${dayjs(option.endDate).format("DD/MM/YYYY")}\`; return String(option); }}` |
+| **Apply to** | Both Dates Autocomplete instances (with data and empty state). | |
+
+**Key takeaway:** When Autocomplete `value` can be an object not in `options`, always provide `getOptionLabel` to avoid `[object Object]`.
+
+---
+
+### 6.3 Stakeholder Not Showing in Edit Dialog
+
+| Aspect | Issue | Fix |
+|--------|-------|-----|
+| **Problem** | COQL query does not include `Stakeholder` in SELECT. Row mapping got `stakeHolder: null`. Edit dialog showed empty Stakeholder field. | Derive stakeholder when COQL excludes it. |
+| **Fix 1** | When `module === "Accounts"` and no Stakeholder from response, set from current Account. | In row mapping: `if (module === "Accounts" && recordId && currentRecord) return { id: recordId, name: currentRecord.Account_Name ?? "Account" };` |
+| **Fix 2** | Use API response value, not state (state updates are async). | `const currentRecord = currentModuleResponse?.data?.[0];` then use `currentRecord` in map. |
+| **Fix 3** | Pass `currentModuleData` to Edit dialog. | `<Dialog ... currentModuleData={currentModuleData} />` |
+| **Fix 4** | Dialog form init fallback when editing. | `else if (selectedRowData && currentModuleData?.Account_Name) stakeHolderValue = { id: currentModuleData.id, name: currentModuleData.Account_Name };` |
+
+**Key takeaway:** When COQL excludes a lookup field, derive it from context (e.g. current record) and pass it to dialogs.
+
+---
+
+### 6.4 Contact / Participants Not Populating in Edit Dialog
+
+| Aspect | Issue | Fix |
+|--------|-------|-----|
+| **Problem** | Dialog and ContactField used `selectedRowData.id` (junction id) when calling `getRelatedRecords` with Entity `History1`. History1 expects its own record id, not the junction id. | Use **History1 record id** (`history_id`) for all History1 API calls. |
+| **Affected** | `fetchHistoryData`, ContactFields `fetchParticipantsDetails`, `updateHistory`, `handleDelete`, `handleAttachmentDelete` | |
+| **Fix** | | `const historyId = selectedRowData?.history_id \|\| selectedRowData?.historyDetails?.id \|\| selectedRowData?.id;` then use `historyId` for RecordID. |
+| **Row mapping** | Add `history_id` and `Participants` from COQL. | Include `Contact_Details.id` in COQL; build `Participants: [{ id, Full_Name }]` from each row. |
+| **Deps** | ContactField useEffect had `[]` – did not refetch when row changed. | Add `selectedRowData?.history_id`, `selectedRowData?.historyDetails?.id`, `selectedRowData?.id` to deps. |
+
+**Key takeaway:** Junction tables have two ids: junction id and the main record id. **Always use the main record id** (History1 id) for History1 APIs (getRelatedRecords, updateRecord, deleteRecord, attachments).
+
+---
+
+### 6.5 Name Showing as Number Instead of Actual Name
+
+| Aspect | Issue | Fix |
+|--------|-------|-----|
+| **Problem** | Junction `Name` field may be numeric. Table showed numbers instead of participant names. | Use `Contact_History_Info.Name` (History record name) for display. |
+| **Fix** | Add to COQL and prefer in row mapping. | `Contact_History_Info.Name` in SELECT; `name = obj?.["Contact_History_Info.Name"] ?? obj?.Contact_History_Info?.Name ?? obj?.["Contact_Details.Full_Name"] ?? obj?.Name ?? "No Name"` |
+
+**Key takeaway:** Junction `Name` can be auto-generated (e.g. number). Prefer the main record's `Name` or `Contact_Details.Full_Name` for display.
+
+---
+
+### 6.6 Update Failing ("Failed to update record")
+
+| Aspect | Issue | Fix |
+|--------|-------|-----|
+| **Problem 1** | `finalData` included `id: selectedRowData?.id` (junction id). When building APIData for History1 update, this overwrote the correct id. Zoho tried to update History1 with junction id – invalid. | Exclude `id` from finalData when building APIData for History1. |
+| **Fix** | | `const { id: _omitId, ...restFinalData } = finalData;` then `APIData: { id: historyId, ...restFinalData }` |
+| **Problem 2** | `Owner` was passed as full user object. Zoho expects `Owner: { id: "userId" }` for lookups. | `Owner: selectedOwner?.id ? { id: selectedOwner.id } : undefined` |
+| **Problem 3** | `updateHistory` used `selectedRowData?.id` for RecordID. | Use `historyId` (history_id) for all History1 operations. |
+
+**Key takeaway:** For lookup fields (Owner, Stakeholder), send only `{ id: "..." }`. Never send junction id when updating the main record.
+
+---
+
+### 6.7 Attachment Download Not Working
+
+| Aspect | Issue | Fix |
+|--------|-------|-----|
+| **Problem** | DownloadButton passed `rowId={row?.id}` (junction id). Attachments are stored on the **History1** record, not the junction. | Pass History1 record id to DownloadButton. |
+| **Fix** | | `rowId={row?.history_id \|\| row?.historyDetails?.id \|\| row?.id}` |
+| **Additional** | Add error handling, snackbar feedback, safe filename fallback. | `fileName \|\| "attachment"`; return `{ data, error }` from downloadAttachmentById. |
+
+**Key takeaway:** Attachments belong to the main record (History1). Use `history_id` for getAttachments and downloadAttachmentById.
+
+---
+
+### 6.8 Duplicate Rows in Table
+
+| Aspect | Issue | Fix |
+|--------|-------|-----|
+| **Problem** | One History record with multiple contacts = multiple junction rows in History_X_Contacts. COQL returns one row per junction. Table showed duplicate rows (same Date, Type, Result, etc.). | Deduplicate by `history_id`. |
+| **Fix** | | After mapping, group by `history_id`; merge participants; show one row per History. |
+| **Implementation** | | `const byHistory = new Map();` for each row, `byHistory.set(key, mergedRow)`; merge Participants; use `history_id` as row id. |
+
+**Key takeaway:** Junction tables produce one row per relationship. When displaying "one row per main record," deduplicate by the main record id and merge related data (e.g. participants).
+
+---
+
+### 6.9 Quick Reference: Junction vs Main Record IDs
+
+| Use Case | Use Junction ID (`row.id`) | Use Main Record ID (`row.history_id`) |
+|----------|---------------------------|---------------------------------------|
+| Table row key (after dedup) | | ✓ |
+| Fetch contacts (History1 → Contacts3) | | ✓ |
+| Fetch attachments (History1 → Attachments) | | ✓ |
+| Update History1 record | | ✓ |
+| Delete History1 record | | ✓ |
+| Match row for UI update after save | ✓ (or history_id after dedup) | ✓ |
+
+---
+
+### 6.10 Files Modified (Complete List)
+
+| File | Changes |
+|------|---------|
+| `src/zohoApi/record.js` | COQL query with expanded paths; `Contact_History_Info.Name`, `Contact_Details.id` |
+| `src/App.js` | Row mapping for expanded paths; stakeholder from Account; Participants; deduplication by history_id; Dates getOptionLabel; pass currentModuleData to Edit dialog |
+| `src/components/organisms/Dialog.js` | Use history_id for fetchHistoryData, updateHistory, handleDelete, handleAttachmentDelete; exclude id from APIData; Owner as { id }; stakeHolder fallback; pass currentModuleData |
+| `src/components/organisms/ContactFields.jsx` | Use history_id for fetchParticipantsDetails; fix useEffect deps |
+| `src/components/organisms/Table.js` | DownloadButton uses history_id; error handling for download |
+| `src/zohoApi/file.js` | Safe filename; return error from downloadAttachmentById |
+| `STAKEHOLDER_HISTORY_COQL_DELUGE.txt` | Working Deluge queries with all fields |
+
+---
+
+*Adapted from COQL_AND_FILTERING_IMPLEMENTATION_PLAN.md for migration-solutions-stakeholder-history. Schema verification in Zoho/Deluge is required before COQL implementation. Part 6 documents post-implementation issues and fixes for reuse in other projects.*
