@@ -86,7 +86,6 @@ const App = () => {
   const [openEditDialog, setOpenEditDialog] = React.useState(false);
   const [openCreateDialog, setOpenCreateDialog] = React.useState(false);
   const [ownerList, setOwnerList] = React.useState([]);
-  const [selectedOwner, setSelectedOwner] = React.useState(null);
   const [typeList, setTypeList] = React.useState([]);
   const [selectedType, setSelectedType] = React.useState(null);
   const [dateRange, setDateRange] = React.useState(dateOptions[0]);
@@ -538,9 +537,6 @@ const App = () => {
   const filteredData = React.useMemo(() => {
     if (!relatedListData?.length) return [];
     return relatedListData
-      .filter((el) =>
-        selectedOwner ? el.ownerName === selectedOwner?.full_name : true
-      )
       .filter((el) => (selectedType ? el?.type === selectedType : true))
       .filter((el) => {
         if (dateRange?.preDay) {
@@ -571,7 +567,6 @@ const App = () => {
       });
   }, [
     relatedListData,
-    selectedOwner,
     selectedType,
     dateRange,
     keyword,
@@ -582,7 +577,6 @@ const App = () => {
     if (dateRange?.preDay || dateRange?.startDate || dateRange?.custom)
       active.push("Date");
     if (selectedType) active.push("Type");
-    if (selectedOwner) active.push("User");
     if (keyword?.trim()) active.push("Keyword");
     return active;
   };
@@ -590,7 +584,6 @@ const App = () => {
   const handleClearFilters = () => {
     setDateRange(dateOptions[0]);
     setSelectedType(null);
-    setSelectedOwner(null);
     setKeyword("");
     setCustomRange({ startDate: null, endDate: null });
     setIsCustomRangeDialogOpen(false);
@@ -752,37 +745,6 @@ const App = () => {
                   },
                 }}
                 onChange={(e) => setKeyword(e.target.value)}
-              />
-              <Autocomplete
-                size="small"
-                options={ownerList || []}
-                getOptionLabel={(option) => option?.full_name || "Unknown User"}
-                value={selectedOwner || null}
-                isOptionEqualToValue={(option, value) =>
-                  option?.id === value?.id
-                }
-                sx={{
-                  width: "8rem",
-                  "& .MuiInputBase-root": {
-                    height: "33px",
-                  },
-                  "& .MuiInputLabel-root": {
-                    fontSize: "9pt", // Adjust label font size
-                  },
-                }}
-                renderInput={(params) => (
-                  <TextField {...params} label="Users" size="small" />
-                )}
-                componentsProps={{
-                  popper: {
-                    sx: {
-                      "& .MuiAutocomplete-listbox": {
-                        fontSize: "9pt", // Font size for dropdown options
-                      },
-                    },
-                  },
-                }}
-                onChange={(e, value) => setSelectedOwner(value)}
               />
             </Grid>
             <Grid
@@ -961,28 +923,6 @@ const App = () => {
                   },
                 }}
                 onChange={(e) => setKeyword(e.target.value)}
-              />
-              <Autocomplete
-                size="small"
-                options={ownerList || []}
-                getOptionLabel={(option) => option?.full_name || "Unknown User"}
-                value={selectedOwner || null}
-                isOptionEqualToValue={(option, value) =>
-                  option?.id === value?.id
-                }
-                sx={{
-                  width: "8rem",
-                  "& .MuiInputBase-root": {
-                    height: "33px",
-                  },
-                  "& .MuiInputLabel-root": {
-                    fontSize: "9pt", // Adjust label font size
-                  },
-                }}
-                renderInput={(params) => (
-                  <TextField {...params} label="Users" size="small" />
-                )}
-                onChange={(e, value) => setSelectedOwner(value)}
               />
             </Grid>
             <Grid
