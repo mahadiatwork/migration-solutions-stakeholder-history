@@ -324,11 +324,11 @@ export function Dialog({
 
   const createHistory = async (finalData, selectedParticipants) => {
     try {
+      // Omit Owner from insert - Zoho insertRecord returns INVALID_DATA for Owner on History1
+      const { Owner: _omitOwner, ...apiDataForInsert } = finalData;
       const createConfig = {
         Entity: "History1",
-        APIData: {
-          ...finalData,
-        },
+        APIData: apiDataForInsert,
         Trigger: ["workflow"],
       };
 
@@ -336,6 +336,22 @@ export function Dialog({
       const createResponse = await ZOHO.CRM.API.insertRecord(createConfig);
       if (createResponse?.data[0]?.code === "SUCCESS") {
         const historyId = createResponse.data[0].details.id;
+
+        // If user selected a different owner, assign via Change Owner API
+        let createMessage = "Record created successfully!";
+        let createSeverity = "success";
+        if (selectedOwner?.id && selectedOwner.id !== loggedInUser?.id) {
+          const { error: changeOwnerError } = await zohoApi.record.changeOwner(
+            "History1",
+            historyId,
+            selectedOwner.id
+          );
+          if (changeOwnerError) {
+            console.warn("Record created but owner could not be updated:", changeOwnerError);
+            createMessage = "Record created, but owner could not be set. You can change it in Zoho.";
+            createSeverity = "warning";
+          }
+        }
         // Only upload if formData.attachment is actually a File object (user selected a file)
         if (formData?.attachment instanceof File) {
           const fileResp = await zohoApi.file.uploadAttachment({
@@ -379,8 +395,8 @@ export function Dialog({
 
         setSnackbar({
           open: true,
-          message: "Record created successfully!",
-          severity: "success",
+          message: createMessage,
+          severity: createSeverity,
         });
 
         // Notify parent about the created record

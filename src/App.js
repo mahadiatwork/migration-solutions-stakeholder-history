@@ -177,8 +177,10 @@ const App = () => {
       const usersResponse = await ZOHO.CRM.API.getAllUsers({
         Type: "AllUsers",
       });
+      // Only active users can be assigned as record owner; inactive users cause INVALID_DATA
       const validUsers = usersResponse?.users?.filter(
-        (user) => user?.full_name && user?.id
+        (user) =>
+          user?.full_name && user?.id && user?.status === "active"
       );
       setOwnerList(validUsers || []);
 
@@ -291,7 +293,9 @@ const App = () => {
               }
             : undefined);
         const historyId =
-          obj?.["Contact_History_Info.id"] ?? obj?.Contact_History_Info?.id;
+          obj?.["Contact_History_Info.id"] ??
+          obj?.Contact_History_Info?.id ??
+          obj?.id; // For direct History1 rows, id IS the history id
         const historyDetails = obj?.Contact_History_Info
           ? { ...obj.Contact_History_Info, id: historyId ?? obj.Contact_History_Info.id }
           : historyId
@@ -851,7 +855,7 @@ const App = () => {
                     overflow: "auto",
                     wordWrap: "break-word",
                     whiteSpace: "normal",
-                    lineHeight: 1
+                    lineHeight: 1,
                   }}
                 >
                   {!!regarding && (
@@ -870,17 +874,53 @@ const App = () => {
                       {regarding}
                     </span>
                   )}
-                  {/* <span
-                    style={{
-                      wordWrap: "break-word",
-                      whiteSpace: "normal",
-                      fontSize: "9pt",
-                    }}
-                  >
-                    {details || "No data"}
-                  </span> */}
                   <LinkifyText details={details} />
                 </Box>
+              </Paper>
+            </Grid>
+            {/* JSON debug card under table */}
+            <Grid item xs={12}>
+              <Paper
+                sx={{
+                  mt: 2,
+                  p: 1,
+                  backgroundColor: "#f7f7f7",
+                  maxHeight: 200,
+                  overflow: "auto",
+                  fontSize: "9pt",
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    mb: 0.5,
+                  }}
+                >
+                  <span>Filtered Rows JSON</span>
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      navigator.clipboard.writeText(
+                        JSON.stringify(filteredData, null, 2)
+                      )
+                    }
+                    sx={{ fontSize: "8pt" }}
+                  >
+                    Copy JSON
+                  </Button>
+                </Box>
+                <pre
+                  style={{
+                    margin: 0,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {JSON.stringify(filteredData, null, 2)}
+                </pre>
               </Paper>
             </Grid>
           </Grid>
@@ -1126,6 +1166,7 @@ const App = () => {
                   onChange={(newValue) =>
                     setCustomRange((prev) => ({ ...prev, startDate: newValue }))
                   }
+                  format="DD/MM/YYYY"
                   renderInput={(params) => (
                     <TextField
                       {...params}
@@ -1154,6 +1195,7 @@ const App = () => {
                   onChange={(newValue) =>
                     setCustomRange((prev) => ({ ...prev, endDate: newValue }))
                   }
+                  format="DD/MM/YYYY"
                   renderInput={(params) => (
                     <TextField
                       {...params}
