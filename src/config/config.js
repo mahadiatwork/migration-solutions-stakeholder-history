@@ -9,6 +9,26 @@ export const dataCenterMap = {
 
 export const conn_name = "zoho_crm_conn";
 
+// Zoho CRM custom module used to manage widget pick-list labels and order.
+// The hard-coded values in dialogConstants.js/helperFunc.js remain the
+// compatibility fallback when the module is unavailable or empty.
+export const PICKLIST_CONFIG_MODULE = "Widget_Picklist_Config";
+
+export const PICKLIST_CONFIG_FIELDS = {
+  name: "Name",
+  category: "Category",
+  parentType: "Parent_Type",
+  sortOrder: "Sort_Order",
+  active: "Active",
+};
+
+export const PICKLIST_CATEGORIES = {
+  TYPE: "Type",
+  RESULT: "Result",
+  REGARDING: "Regarding",
+  DURATION: "Duration",
+};
+
 export const access_token_api_url =
   "https://api.easy-pluginz.com.au/admin/v2/data/zoho/crm/downloadattachment";
 

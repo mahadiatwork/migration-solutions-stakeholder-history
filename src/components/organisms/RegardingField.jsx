@@ -2,9 +2,15 @@ import React, { useState, useEffect } from "react";
 import { FormControl, InputLabel, Select, MenuItem, TextField, Box } from "@mui/material";
 import { getRegardingOptions } from "./helperFunc";
 
-const RegardingField = ({ formData, handleInputChange, selectedRowData }) => {
-  const existingValue = selectedRowData?.regarding || formData.regarding;
-  const predefinedOptions = getRegardingOptions(formData.type, existingValue);
+const RegardingField = ({
+  formData,
+  handleInputChange,
+  selectedRowData,
+  picklistConfig,
+}) => {
+  const existingValue = formData?.regarding || selectedRowData?.regarding || "";
+  const predefinedOptions =
+    getRegardingOptions(formData?.type, existingValue, picklistConfig) || [];
 
   const [selectedValue, setSelectedValue] = useState("");
   const [manualInput, setManualInput] = useState("");
@@ -26,8 +32,8 @@ const RegardingField = ({ formData, handleInputChange, selectedRowData }) => {
     if (existingValue !== "Other") {
       setShowManualInput(false); 
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when formData.type changes; existingValue, predefinedOptions are derived
-  }, [formData.type]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- do not reset while manual text is being entered
+  }, [formData.type, selectedRowData?.id]);
   
 
   const handleSelectChange = (event) => {
@@ -66,7 +72,7 @@ const RegardingField = ({ formData, handleInputChange, selectedRowData }) => {
           onChange={handleSelectChange}
           sx={{ "& .MuiInputBase-root": { padding: "0 !important" }, fontSize: "9pt" }}
         >
-          {predefinedOptions.map((option) => (
+          {(Array.isArray(predefinedOptions) ? predefinedOptions : []).map((option) => (
             <MenuItem key={option} value={option} sx={{ fontSize: "9pt" }}>
               {option}
             </MenuItem>

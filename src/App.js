@@ -32,6 +32,10 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { Dialog as MUIDialog } from "@mui/material";
 import { useSnackbar } from "notistack";
 import LinkifyText from "./components/atoms/LinkifyText";
+import {
+  fetchPicklistConfig,
+  getTypeOptionsFromConfig,
+} from "./services/picklistConfigService";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -76,7 +80,7 @@ const dateOptions = [
 ];
 
 const App = () => {
-  const { module, recordId } = useZohoInit();
+  const { module, recordId, initZoho } = useZohoInit();
   const { enqueueSnackbar } = useSnackbar();
   const [initPageContent, setInitPageContent] = React.useState(
     <CircularProgress />
@@ -85,9 +89,11 @@ const App = () => {
   const [, setSelectedRecordId] = React.useState(null);
   const [openEditDialog, setOpenEditDialog] = React.useState(false);
   const [openCreateDialog, setOpenCreateDialog] = React.useState(false);
-  const [ownerList, setOwnerList] = React.useState([]);
+  const [ownerList, setOwnerList] = React.useState([]); // Active users only – for create/edit Record Owner
+  const [allUsersList, setAllUsersList] = React.useState([]); // All users – for Users filter and owner display names
   const [selectedOwner, setSelectedOwner] = React.useState(null); // No default: user filters manually
   const [typeList, setTypeList] = React.useState([]);
+  const [picklistConfig, setPicklistConfig] = React.useState(null);
   const [selectedType, setSelectedType] = React.useState(null);
   const [dateRange, setDateRange] = React.useState(dateOptions[0]);
   const [keyword, setKeyword] = React.useState("");
@@ -177,12 +183,15 @@ const App = () => {
       const usersResponse = await ZOHO.CRM.API.getAllUsers({
         Type: "AllUsers",
       });
+      const allUsers = usersResponse?.users?.filter(
+        (user) => user?.full_name && user?.id
+      ) ?? [];
       // Only active users can be assigned as record owner; inactive users cause INVALID_DATA
-      const validUsers = usersResponse?.users?.filter(
-        (user) =>
-          user?.full_name && user?.id && user?.status === "active"
+      const validUsers = allUsers.filter(
+        (user) => user?.status === "active"
       );
-      setOwnerList(validUsers || []);
+      setOwnerList(validUsers);
+      setAllUsersList(allUsers);
 
       const currentUserResponse = await ZOHO.CRM.CONFIG.getCurrentUser();
       setLoggedInUser(currentUserResponse?.users?.[0] || null);
@@ -326,7 +335,7 @@ const App = () => {
           regarding,
           details: historyDetailsPlain,
           icon: <DownloadIcon />,
-          ownerName: getOwnerDisplayName(owner, validUsers),
+          ownerName: getOwnerDisplayName(owner, allUsers),
           historyDetails,
           stakeHolder: stakeHolderValue,
         };
@@ -376,27 +385,12 @@ const App = () => {
         a.localeCompare(b)
       ); // Sort alphabetically
 
-      const additionalTypes = [
-        "Meeting",
-        "To-Do",
-        "Call",
-        "Appointment",
-        "Boardroom",
-        "Call Billing",
-        "Email Billing",
-        "Initial Consultation",
-        "Mail",
-        "Meeting Billing",
-        "Personal Activity",
-        "Room 1",
-        "Room 2",
-        "Room 3",
-        "Todo Billing",
-        "Vacation",
-      ]; // Example additional options
+      const config = await fetchPicklistConfig();
+      setPicklistConfig(config);
+      const configuredTypes = getTypeOptionsFromConfig(config);
 
       const sortedTypesWithAdditional = [
-        ...new Set([...additionalTypes, ...sortedTypes]), // Merge additional options with existing ones
+        ...new Set([...configuredTypes, ...sortedTypes]),
       ].sort((a, b) => a.localeCompare(b)); // Sort alphabetically
 
       setTypeList(sortedTypesWithAdditional);
@@ -411,6 +405,30 @@ const App = () => {
       }
     }
   }, [module, recordId, currentContact, enqueueSnackbar]);
+
+  // Retry after the Zoho SDK is fully initialized. Failed/empty reads are not
+  // cached by the service, so a transient early fallback can recover here.
+  React.useEffect(() => {
+    if (!initZoho) return undefined;
+    let cancelled = false;
+
+    fetchPicklistConfig()
+      .then((config) => {
+        if (cancelled) return;
+        setPicklistConfig(config);
+        setTypeList((previousTypes) =>
+          [...new Set([...getTypeOptionsFromConfig(config), ...previousTypes])]
+            .sort((left, right) => left.localeCompare(right))
+        );
+      })
+      .catch((error) => {
+        console.warn("Unable to refresh Widget_Picklist_Config:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initZoho]);
 
   React.useEffect(() => {
     if (module && recordId) {
@@ -603,30 +621,52 @@ const App = () => {
   const [applications, setApplications] = React.useState([]);
   const [openApplicationDialog, setOpenApplicationDialog] =
     React.useState(false);
+  const [isApplicationsLoading, setIsApplicationsLoading] = React.useState(false);
 
   const handleMoveToApplication = async () => {
+    setOpenApplicationDialog(true);
+    setIsApplicationsLoading(true);
+    setApplications([]);
     try {
-      // Fetch related applications for the current contact
-      const response = await ZOHO.CRM.API.getRelatedRecords({
-        Entity: "Accounts",
-        RecordID: currentModuleData?.id,
-        RelatedList: "Applications",
-        page: 1,
-        per_page: 200,
-      });
-      if (response?.data) {
-        setApplications(response.data || []);
-        setOpenApplicationDialog(true); // Open the application selection dialog
-      } else {
-        throw new Error("No related applications found.");
+      let response = null;
+      const recordIdToUse = currentModuleData?.id ?? recordId;
+      try {
+        response = await ZOHO.CRM.API.getRelatedRecords({
+          Entity: module,
+          RecordID: recordIdToUse,
+          RelatedList: "Applications",
+          page: 1,
+          per_page: 200,
+        });
+      } catch (moduleErr) {
+        console.warn("Applications not on current module, trying Account fallback:", moduleErr);
       }
+      if ((!response?.data || response.data.length === 0) && currentModuleData) {
+        try {
+          const accountId =
+            currentModuleData?.Account_Name?.id ??
+            currentModuleData?.Account?.id ??
+            currentModuleData?.account?.id;
+          if (accountId) {
+            response = await ZOHO.CRM.API.getRelatedRecords({
+              Entity: "Accounts",
+              RecordID: accountId,
+              RelatedList: "Applications",
+              page: 1,
+              per_page: 200,
+            });
+          }
+        } catch (accountErr) {
+          console.warn("Account applications fallback failed:", accountErr);
+        }
+      }
+      const list = response?.data && Array.isArray(response.data) ? response.data : [];
+      setApplications(list);
     } catch (error) {
-      console.error("Error fetching related applications:", error);
-      // setSnackbar({
-      //   open: true,
-      //   message: "Failed to fetch related applications.",
-      //   severity: "error",
-      // });
+      console.warn("Error fetching related applications:", error);
+      setApplications([]);
+    } finally {
+      setIsApplicationsLoading(false);
     }
   };
 
@@ -759,7 +799,7 @@ const App = () => {
               />
               <Autocomplete
                 size="small"
-                options={ownerList || []}
+                options={allUsersList || []}
                 getOptionLabel={(option) => option?.full_name || "Unknown User"}
                 value={selectedOwner || null}
                 isOptionEqualToValue={(option, value) =>
@@ -878,51 +918,6 @@ const App = () => {
                 </Box>
               </Paper>
             </Grid>
-            {/* JSON debug card under table */}
-            <Grid item xs={12}>
-              <Paper
-                sx={{
-                  mt: 2,
-                  p: 1,
-                  backgroundColor: "#f7f7f7",
-                  maxHeight: 200,
-                  overflow: "auto",
-                  fontSize: "9pt",
-                }}
-              >
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    mb: 0.5,
-                  }}
-                >
-                  <span>Filtered Rows JSON</span>
-                  <Button
-                    size="small"
-                    onClick={() =>
-                      navigator.clipboard.writeText(
-                        JSON.stringify(filteredData, null, 2)
-                      )
-                    }
-                    sx={{ fontSize: "8pt" }}
-                  >
-                    Copy JSON
-                  </Button>
-                </Box>
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {JSON.stringify(filteredData, null, 2)}
-                </pre>
-              </Paper>
-            </Grid>
           </Grid>
         ) : (
           <Grid container spacing={2}>
@@ -1004,7 +999,7 @@ const App = () => {
               />
               <Autocomplete
                 size="small"
-                options={ownerList || []}
+                options={allUsersList || []}
                 getOptionLabel={(option) => option?.full_name || "Unknown User"}
                 value={selectedOwner || null}
                 isOptionEqualToValue={(option, value) =>
@@ -1123,10 +1118,12 @@ const App = () => {
         setSelectedContacts={setSelectedContacts}
         buttonText="Update"
         handleMoveToApplication={handleMoveToApplication}
+        isApplicationsLoading={isApplicationsLoading}
         applications={applications}
         openApplicationDialog={openApplicationDialog}
         setOpenApplicationDialog={setOpenApplicationDialog}
         currentModuleData={currentModuleData}
+        picklistConfig={picklistConfig}
       />
       <Dialog
         openDialog={openCreateDialog}
@@ -1141,6 +1138,7 @@ const App = () => {
         setSelectedContacts={setSelectedContacts}
         buttonText="Save"
         currentModuleData={currentModuleData}
+        picklistConfig={picklistConfig}
       />
       {isCustomRangeDialogOpen && (
         <MUIDialog

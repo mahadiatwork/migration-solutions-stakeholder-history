@@ -1,6 +1,10 @@
 
 
-export const getResultOptions = (type) => {
+export const getResultOptions = (type, picklistConfig) => {
+  const configuredResults =
+    picklistConfig?.results?.[type] ?? picklistConfig?.results?._default;
+  if (configuredResults?.length) return configuredResults;
+
   switch (type) {
     case "Meeting":
       return ["Meeting Held", "Meeting Not Held"]; // Wrap in an array
@@ -40,7 +44,22 @@ export const getResultOptions = (type) => {
 };
 
 
-export const getRegardingOptions = (type, existingValue) => {
+export const getRegardingOptions = (type, existingValue, picklistConfig) => {
+  const configuredRegarding =
+    picklistConfig?.regarding?.[type] ?? picklistConfig?.regarding?._default;
+  if (configuredRegarding?.length) {
+    const values = [...configuredRegarding];
+    const safeExistingValue =
+      typeof existingValue === "string" ? existingValue : "";
+    if (
+      safeExistingValue.trim() &&
+      !values.includes(safeExistingValue)
+    ) {
+      values.unshift(safeExistingValue);
+    }
+    return values;
+  }
+
   const options = {
     Call: [
       "2nd Followup", "3rd Followup", "4th Followup", "5th Followup",
@@ -70,8 +89,13 @@ export const getRegardingOptions = (type, existingValue) => {
   let predefinedOptions = options[type] || ["General"];
 
   // Only add existingValue if it's not empty and not already in the options
-  if (existingValue && existingValue.trim() !== "" && !predefinedOptions.includes(existingValue)) {
-    predefinedOptions = [existingValue, ...predefinedOptions];
+  const safeExistingValue =
+    typeof existingValue === "string" ? existingValue : "";
+  if (
+    safeExistingValue.trim() &&
+    !predefinedOptions.includes(safeExistingValue)
+  ) {
+    predefinedOptions = [safeExistingValue, ...predefinedOptions];
   }
 
   return predefinedOptions;

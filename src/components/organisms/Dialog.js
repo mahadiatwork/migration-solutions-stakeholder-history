@@ -26,6 +26,11 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { getRegardingOptions, getResultOptions } from "./helperFunc";
+import {
+  getDurationOptionsFromConfig,
+  getResultMappingFromConfig,
+  getTypeOptionsFromConfig,
+} from "../../services/picklistConfigService";
 import ContactField from "./ContactFields";
 import RegardingField from "./RegardingField";
 import IconButton from "@mui/material/IconButton"; // For the clickable icon button
@@ -34,6 +39,11 @@ import { zohoApi } from "../../zohoApi";
 import ApplicationDialog from "./ApplicationTable";
 import Stakeholder from "../atoms/Stakeholder";
 import { Close } from "@mui/icons-material";
+import {
+  durationOptions as fallbackDurationOptions,
+  resultMapping as fallbackResultMapping,
+  typeOptions as fallbackTypeOptions,
+} from "./dialogConstants";
 
 const VisuallyHiddenInput = styled("input")({
   clip: "rect(0 0 0 0)",
@@ -46,32 +56,6 @@ const VisuallyHiddenInput = styled("input")({
   whiteSpace: "nowrap",
   width: 1,
 });
-
-const durationOptions = Array.from({ length: 24 }, (_, i) => (i + 1) * 10);
-
-const resultMapping = {
-  Meeting: "Meeting Held",
-  "To-Do": "To-do Done",
-  Appointment: "Appointment Completed",
-  Boardroom: "Boardroom - Completed",
-  "Call Billing": "Call Billing - Completed",
-  "Email Billing": "Mail - Completed",
-  "Initial Consultation": "Initial Consultation - Completed",
-  Call: "Call Completed",
-  Mail: "Mail Sent",
-  "Meeting Billing": "Meeting Billing - Completed",
-  "Personal Activity": "Personal Activity - Completed",
-  "Room 1": "Room 1 - Completed",
-  "Room 2": "Room 2 - Completed",
-  "Room 3": "Room 3 - Completed",
-  "To Do Billing": "To Do Billing - Completed",
-  Vacation: "Vacation - Completed",
-  Other: "Attachment", // Just added it.
-};
-
-const typeMapping = Object.fromEntries(
-  Object.entries(resultMapping).map(([type, result]) => [result, type])
-);
 
 export function Dialog({
   openDialog,
@@ -86,10 +70,12 @@ export function Dialog({
   setSelectedContacts,
   buttonText = "Save",
   handleMoveToApplication,
+  isApplicationsLoading,
   applications,
   openApplicationDialog,
   setOpenApplicationDialog,
   currentModuleData,
+  picklistConfig = null,
 }) {
   const [, setHistoryName] = React.useState("");
   const [historyContacts, setHistoryContacts] = React.useState([]);
@@ -100,10 +86,50 @@ export function Dialog({
     loggedInUser ||
     null
   );
-  const [, setSelectedType] = React.useState("Meeting");
   const [loadedAttachmentFromRecord, setLoadedAttachmentFromRecord] =
     React.useState();
   const [formData, setFormData] = React.useState(selectedRowData || {}); // Form data state
+  const configuredDurationOptions = picklistConfig
+    ? getDurationOptionsFromConfig(picklistConfig)
+    : fallbackDurationOptions;
+  const resultMapping = picklistConfig
+    ? getResultMappingFromConfig(picklistConfig)
+    : fallbackResultMapping;
+  const typeMapping = Object.fromEntries(
+    Object.entries(resultMapping).map(([type, result]) => [result, type])
+  );
+  const configuredTypeOptions = picklistConfig
+    ? getTypeOptionsFromConfig(picklistConfig)
+    : fallbackTypeOptions;
+  const typeOptions =
+    selectedRowData &&
+    formData?.type &&
+    !configuredTypeOptions.includes(formData.type)
+      ? [formData.type, ...configuredTypeOptions]
+      : configuredTypeOptions;
+  const defaultType = configuredTypeOptions[0] || "";
+  const defaultResult = getResultOptions(defaultType, picklistConfig)[0] || "";
+  const defaultDuration = configuredDurationOptions[0] ?? null;
+  const defaultRegarding =
+    getRegardingOptions(defaultType, "", picklistConfig)[0] || "";
+  const durationOptions =
+    selectedRowData &&
+    formData?.duration != null &&
+    !configuredDurationOptions.some(
+      (duration) => Number(duration) === Number(formData.duration)
+    )
+      ? [formData.duration, ...configuredDurationOptions]
+      : configuredDurationOptions;
+  const configuredResultOptions = getResultOptions(
+    formData.type,
+    picklistConfig
+  );
+  const resultOptions =
+    selectedRowData &&
+    formData?.result &&
+    !configuredResultOptions.includes(formData.result)
+      ? [formData.result, ...configuredResultOptions]
+      : configuredResultOptions;
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   // console.log({ formData });
   const [snackbar, setSnackbar] = React.useState({
@@ -176,10 +202,10 @@ export function Dialog({
 
         const base = {
           Participants: selectedRowData?.Participants || [],
-          result: selectedRowData?.result || "Meeting Held",
-          type: selectedRowData?.type || "Meeting",
-          duration: selectedRowData?.duration || "60",
-          regarding: selectedRowData?.regarding || "",
+          result: selectedRowData?.result || defaultResult,
+          type: selectedRowData?.type || defaultType,
+          duration: selectedRowData?.duration || defaultDuration,
+          regarding: selectedRowData?.regarding || defaultRegarding,
           details: selectedRowData?.details || "",
           stakeHolder: stakeHolderValue,
           date_time: selectedRowData?.date_time
@@ -210,7 +236,7 @@ export function Dialog({
       setFormData({});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- form init; ownerList, setSelectedContacts, ZOHO are stable
-  }, [openDialog, selectedRowData, loggedInUser, currentContact, currentModuleData]);
+  }, [openDialog, selectedRowData, loggedInUser, currentContact, currentModuleData, picklistConfig]);
 
   React.useEffect(() => {
     const fetchHistoryData = async () => {
@@ -655,26 +681,6 @@ export function Dialog({
     setSnackbar({ open: false, message: "", severity: "success" });
   };
 
-  const typeOptions = [
-    "Meeting",
-    "To-Do",
-    "Appointment",
-    "Boardroom",
-    "Call Billing",
-    "Email Billing",
-    "Initial Consultation",
-    "Call",
-    "Mail",
-    "Meeting Billing",
-    "Personal Activity",
-    "Room 1",
-    "Room 2",
-    "Room 3",
-    "To Do Billing",
-    "Vacation",
-    "Other",
-  ];
-
   const [, setSelectedApplicationId] =
     React.useState(null);
 
@@ -744,12 +750,14 @@ export function Dialog({
                     handleInputChange("type", e.target.value);
                     handleInputChange(
                       "result",
-                      getResultOptions(e.target.value)[0]
+                      getResultOptions(e.target.value, picklistConfig)[0]
                     );
 
-                    handleInputChange("regarding", getRegardingOptions(e.target.value)[0]);
+                    handleInputChange(
+                      "regarding",
+                      getRegardingOptions(e.target.value, "", picklistConfig)[0]
+                    );
 
-                    setSelectedType(e.target.value);
                   }}
                   label="Type"
                   sx={{
@@ -793,7 +801,7 @@ export function Dialog({
                     },
                   }}
                 >
-                  {getResultOptions(formData.type).map((result) => (
+                  {resultOptions.map((result) => (
                     <MenuItem
                       key={result}
                       value={result}
@@ -890,9 +898,18 @@ export function Dialog({
 
             <Grid item xs={6}>
               <Autocomplete
-                options={durationOptions}
-                getOptionLabel={(option) => option.toString()}
-                value={formData?.duration || null} // Provide a fallback value
+                options={durationOptions || []}
+                getOptionLabel={(option) =>
+                  option != null ? String(option) : ""
+                }
+                value={
+                  formData?.duration == null
+                    ? null
+                    : (durationOptions || []).find(
+                        (option) =>
+                          Number(option) === Number(formData.duration)
+                      ) ?? formData.duration
+                }
                 onChange={(event, newValue) =>
                   handleInputChange("duration", newValue)
                 }
@@ -980,6 +997,7 @@ export function Dialog({
                 formData={formData}
                 handleInputChange={handleInputChange}
                 selectedRowData={selectedRowData}
+                picklistConfig={picklistConfig}
               />
             </Grid>
           </Grid>
@@ -1136,7 +1154,7 @@ export function Dialog({
                 onClick={handleMoveToApplication}
                 variant="outlined"
                 color="success"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isApplicationsLoading}
                 sx={{
                   fontSize: "9pt",
                   marginLeft: "8px",
@@ -1144,7 +1162,8 @@ export function Dialog({
                   padding: "4px 8px",
                 }}
               >
-                Move to Application
+                {isApplicationsLoading && <CircularProgress size={14} sx={{ mr: 0.5 }} />}
+                {isApplicationsLoading ? "Loading..." : "Move to Application"}
               </Button>
               {/*               
               <Button
@@ -1190,6 +1209,7 @@ export function Dialog({
         openApplicationDialog={openApplicationDialog}
         handleApplicationDialogClose={handleApplicationDialogClose}
         applications={applications}
+        isApplicationsLoading={isApplicationsLoading}
         ZOHO={ZOHO}
         handleDelete={handleDelete}
         formData={formData}
