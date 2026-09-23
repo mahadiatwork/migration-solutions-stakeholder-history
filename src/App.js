@@ -265,12 +265,12 @@ const App = () => {
           obj?.History_Type ??
           obj?.["Contact_History_Info.History_Type"] ??
           obj?.Contact_History_Info?.History_Type ??
-          "Unknown Type";
+          "Unknown Category";
         const historyResult =
           obj?.History_Result ??
           obj?.["Contact_History_Info.History_Result"] ??
           obj?.Contact_History_Info?.History_Result ??
-          "No Result";
+          "No Activity Type";
         const duration =
           obj?.Duration ??
           obj?.["Contact_History_Info.Duration"] ??
@@ -310,6 +310,32 @@ const App = () => {
           : historyId
             ? { id: historyId }
             : undefined;
+        const matterLookup =
+          obj?.Matter ??
+          obj?.Contact_History_Info?.Matter ??
+          (obj?.["Contact_History_Info.Matter.id"]
+            ? { id: obj["Contact_History_Info.Matter.id"] }
+            : null);
+        const matterNo =
+          obj?.Matter_No ??
+          obj?.["Contact_History_Info.Matter_No"] ??
+          obj?.Contact_History_Info?.Matter_No ??
+          "";
+        const currentStage =
+          obj?.Current_Stage ??
+          obj?.["Contact_History_Info.Current_Stage"] ??
+          obj?.Contact_History_Info?.Current_Stage ??
+          "";
+        const matterProgress =
+          obj?.Matter_Progress ??
+          obj?.["Contact_History_Info.Matter_Progress"] ??
+          obj?.Contact_History_Info?.Matter_Progress ??
+          "";
+        const billingType =
+          obj?.Billing_Type ??
+          obj?.["Contact_History_Info.Billing_Type"] ??
+          obj?.Contact_History_Info?.Billing_Type ??
+          "Billable";
 
         // Build Participants from Contact_Details (each COQL row is one junction = one contact)
         const contactId =
@@ -338,6 +364,11 @@ const App = () => {
           ownerName: getOwnerDisplayName(owner, allUsers),
           historyDetails,
           stakeHolder: stakeHolderValue,
+          matter: matterLookup,
+          matterNo,
+          currentStage,
+          matterProgress,
+          billingType,
         };
       });
 
@@ -390,8 +421,9 @@ const App = () => {
       const configuredTypes = getTypeOptionsFromConfig(config);
 
       const sortedTypesWithAdditional = [
-        ...new Set([...configuredTypes, ...sortedTypes]),
-      ].sort((a, b) => a.localeCompare(b)); // Sort alphabetically
+        ...configuredTypes,
+        ...sortedTypes.filter((type) => !configuredTypes.includes(type)),
+      ];
 
       setTypeList(sortedTypesWithAdditional);
 
@@ -468,9 +500,9 @@ const App = () => {
       id: newRecord.id,
       name: updatedName,
       date_time: newRecord.Date || dayjs().format(), // Ensure date is consistent
-      type: newRecord.History_Type || "Unknown Type",
-      result: newRecord.History_Result || "No Result",
-      duration: newRecord.Duration || "N/A",
+      type: newRecord.History_Type || "Unknown Category",
+      result: newRecord.History_Result || "No Activity Type",
+      duration: newRecord.Duration ?? "N/A",
       regarding: newRecord.Regarding || "No Regarding",
       details: newRecord.History_Details_Plain || "No Details",
       ownerName: newRecord.Owner?.full_name || "Unknown Owner",
@@ -481,6 +513,11 @@ const App = () => {
           : newRecord.historyDetails?.name || "Unknown",
       },
       stakeHolder: newRecord.Stakeholder || null,
+      matter: newRecord.Matter || null,
+      matterNo: newRecord.Matter_No || "",
+      currentStage: newRecord.Current_Stage || "",
+      matterProgress: newRecord.Matter_Progress || "",
+      billingType: newRecord.Billing_Type || "Billable",
       Participants: participantsArray,
     };
 
@@ -520,7 +557,12 @@ const App = () => {
       details: updatedRecord.History_Details_Plain,
       ownerName: updatedRecord?.Owner?.full_name,
       date_time: updatedRecord?.Date, // Ensure date is consistent
-      stakeHolder: updatedRecord?.Stakeholder
+      stakeHolder: updatedRecord?.Stakeholder,
+      matter: updatedRecord?.Matter || null,
+      matterNo: updatedRecord?.Matter_No || "",
+      currentStage: updatedRecord?.Current_Stage || "",
+      matterProgress: updatedRecord?.Matter_Progress || "",
+      billingType: updatedRecord?.Billing_Type || "Billable",
       // name: updatedRecord.Participants
       //     ? updatedRecord.Participants.map((c) => c.Full_Name).join(", ")
       //     : updatedRecord.name,
@@ -603,7 +645,7 @@ const App = () => {
     const active = [];
     if (dateRange?.preDay || dateRange?.startDate || dateRange?.custom)
       active.push("Date");
-    if (selectedType) active.push("Type");
+    if (selectedType) active.push("Category");
     if (selectedOwner) active.push("User");
     if (keyword?.trim()) active.push("Keyword");
     return active;
@@ -759,7 +801,7 @@ const App = () => {
                 renderInput={(params) => (
                   <TextField
                     {...params}
-                    label="Types"
+                    label="Categories"
                     size="small"
                     InputLabelProps={{ style: { fontSize: "9pt" } }}
                   />
@@ -977,7 +1019,7 @@ const App = () => {
                   },
                 }}
                 renderInput={(params) => (
-                  <TextField {...params} label="Types" size="small" />
+                  <TextField {...params} label="Categories" size="small" />
                 )}
                 onChange={(e, value) => setSelectedType(value)}
               />
@@ -1058,8 +1100,8 @@ const App = () => {
                   <TableHead>
                     <TableRow>
                       <TableCell>Name</TableCell>
-                      <TableCell>Type</TableCell>
-                      <TableCell>Result</TableCell>
+                      <TableCell>Category</TableCell>
+                      <TableCell>Activity Type</TableCell>
                       <TableCell>Date & Time</TableCell>
                       <TableCell>Owner</TableCell>
                     </TableRow>
@@ -1077,8 +1119,8 @@ const App = () => {
                           }}
                         >
                           <TableCell>{row.name || "Unknown Name"}</TableCell>
-                          <TableCell>{row.type || "Unknown Type"}</TableCell>
-                          <TableCell>{row.result || "No Result"}</TableCell>
+                          <TableCell>{row.type || "Unknown Category"}</TableCell>
+                          <TableCell>{row.result || "No Activity Type"}</TableCell>
                           <TableCell>
                             {row.date_time
                               ? dayjs(row.date_time).format(

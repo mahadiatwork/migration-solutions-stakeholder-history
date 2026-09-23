@@ -1,6 +1,10 @@
 
 
+import { mandatoryActivityTypes } from "./dialogConstants";
+
 export const getResultOptions = (type, picklistConfig) => {
+  if (mandatoryActivityTypes[type]) return mandatoryActivityTypes[type];
+
   const configuredResults =
     picklistConfig?.results?.[type] ?? picklistConfig?.results?._default;
   if (configuredResults?.length) return configuredResults;

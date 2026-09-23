@@ -6,6 +6,8 @@ import {
   conn_name,
 } from "../config/config";
 import {
+  mandatoryActivityTypes,
+  mandatoryCategoryOptions,
   typeOptions as defaultTypeOptions,
   resultMapping as defaultResultMapping,
   durationOptions as defaultDurationOptions,
@@ -262,13 +264,35 @@ const groupRecords = (records) => {
   };
 };
 
+const prependUnique = (mandatory, configured = []) => [
+  ...mandatory,
+  ...configured.filter((value) => !mandatory.includes(value)),
+];
+
 export const getTypeOptionsFromConfig = (config) =>
-  config?.types?.length ? config.types : defaultTypeOptions;
+  prependUnique(
+    mandatoryCategoryOptions,
+    config?.types?.length ? config.types : defaultTypeOptions
+  );
 
-export const getDurationOptionsFromConfig = (config) =>
-  config?.durations?.length ? config.durations : defaultDurationOptions;
+export const getDurationOptionsFromConfig = (config) => {
+  const configuredDurations = (config?.durations || [])
+    .map((value) => Number(value))
+    .filter(Number.isFinite);
+  return prependUnique(defaultDurationOptions, configuredDurations);
+};
 
-export const getResultMappingFromConfig = (config) =>
-  config?.resultMapping && Object.keys(config.resultMapping).length
+const mandatoryResultMapping = Object.fromEntries(
+  Object.entries(mandatoryActivityTypes).map(([category, values]) => [
+    category,
+    values[0],
+  ])
+);
+
+export const getResultMappingFromConfig = (config) => ({
+  ...defaultResultMapping,
+  ...(config?.resultMapping && Object.keys(config.resultMapping).length
     ? config.resultMapping
-    : defaultResultMapping;
+    : {}),
+  ...mandatoryResultMapping,
+});

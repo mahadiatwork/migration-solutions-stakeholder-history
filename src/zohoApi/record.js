@@ -2,6 +2,46 @@ import { dataCenterMap, conn_name } from "../config/config";
 
 const ZOHO = window.ZOHO;
 
+const JUNCTION_HISTORY_SELECT = [
+  "Name",
+  "id",
+  "Contact_History_Info.id",
+  "Contact_History_Info.Name",
+  "Owner.first_name",
+  "Owner.last_name",
+  "Contact_Details.id",
+  "Contact_Details.Full_Name",
+  "Contact_History_Info.History_Type",
+  "Contact_History_Info.History_Result",
+  "Contact_History_Info.Duration",
+  "Contact_History_Info.Regarding",
+  "Contact_History_Info.History_Details_Plain",
+  "Contact_History_Info.Date",
+  "Contact_History_Info.Matter.id",
+  "Contact_History_Info.Matter_No",
+  "Contact_History_Info.Current_Stage",
+  "Contact_History_Info.Matter_Progress",
+  "Contact_History_Info.Billing_Type",
+].join(", ");
+
+const DIRECT_HISTORY_SELECT = [
+  "id",
+  "Name",
+  "Date",
+  "History_Type",
+  "History_Result",
+  "Duration",
+  "Regarding",
+  "History_Details_Plain",
+  "Owner",
+  "Stakeholder",
+  "Matter",
+  "Matter_No",
+  "Current_Stage",
+  "Matter_Progress",
+  "Billing_Type",
+].join(", ");
+
 /**
  * Fetch Stakeholder History via COQL v8 API (up to 2000 records in one call)
  * Schema: History_X_Contacts for Contact parent; verify in Zoho if COQL fails
@@ -47,7 +87,7 @@ export async function fetchStakeholderHistoryViaCoqlV8(
   if (module === "Contacts") {
     const whereClause = `Contact_Details = '${recordId}'`;
     const fromModule = "History_X_Contacts";
-    const selectQuery = `SELECT Name, id, Contact_History_Info.id, Contact_History_Info.Name, Owner.first_name, Owner.last_name, Contact_Details.id, Contact_Details.Full_Name, Contact_History_Info.History_Type, Contact_History_Info.History_Result, Contact_History_Info.Duration, Contact_History_Info.Regarding, Contact_History_Info.History_Details_Plain, Contact_History_Info.Date FROM ${fromModule} WHERE ${whereClause} LIMIT ${offset}, ${limit}`;
+    const selectQuery = `SELECT ${JUNCTION_HISTORY_SELECT} FROM ${fromModule} WHERE ${whereClause} LIMIT ${offset}, ${limit}`;
 
     const req_data = {
       url: baseUrl,
@@ -71,7 +111,7 @@ export async function fetchStakeholderHistoryViaCoqlV8(
 
     // 1) Junction: History_X_Contacts (needed for Participants)
     const fromJunction = "History_X_Contacts";
-    const selectJunction = `SELECT Name, id, Contact_History_Info.id, Contact_History_Info.Name, Owner.first_name, Owner.last_name, Contact_Details.id, Contact_Details.Full_Name, Contact_History_Info.History_Type, Contact_History_Info.History_Result, Contact_History_Info.Duration, Contact_History_Info.Regarding, Contact_History_Info.History_Details_Plain, Contact_History_Info.Date FROM ${fromJunction} WHERE ${whereStakeholder} LIMIT ${offset}, ${limit}`;
+    const selectJunction = `SELECT ${JUNCTION_HISTORY_SELECT} FROM ${fromJunction} WHERE ${whereStakeholder} LIMIT ${offset}, ${limit}`;
 
     const junctionReq = {
       url: baseUrl,
@@ -89,7 +129,7 @@ export async function fetchStakeholderHistoryViaCoqlV8(
     // 2) Main History: History1 (CustomModule4) by Stakeholder
     //    This ensures we also fetch records that have no History_X_Contacts row.
     const fromHistory = "History1";
-    const selectHistory = `SELECT id, Name, Date, History_Type, History_Result, Duration, Regarding, History_Details_Plain, Owner, Stakeholder FROM ${fromHistory} WHERE ${whereStakeholder} LIMIT ${offset}, ${limit}`;
+    const selectHistory = `SELECT ${DIRECT_HISTORY_SELECT} FROM ${fromHistory} WHERE ${whereStakeholder} LIMIT ${offset}, ${limit}`;
 
     const historyReq = {
       url: baseUrl,
@@ -112,7 +152,7 @@ export async function fetchStakeholderHistoryViaCoqlV8(
   // Fallback: treat like Contact context
   const whereClause = `Contact_Details = '${recordId}'`;
   const fromModule = "History_X_Contacts";
-  const selectQuery = `SELECT Name, id, Contact_History_Info.id, Contact_History_Info.Name, Owner.first_name, Owner.last_name, Contact_Details.id, Contact_Details.Full_Name, Contact_History_Info.History_Type, Contact_History_Info.History_Result, Contact_History_Info.Duration, Contact_History_Info.Regarding, Contact_History_Info.History_Details_Plain, Contact_History_Info.Date FROM ${fromModule} WHERE ${whereClause} LIMIT ${offset}, ${limit}`;
+  const selectQuery = `SELECT ${JUNCTION_HISTORY_SELECT} FROM ${fromModule} WHERE ${whereClause} LIMIT ${offset}, ${limit}`;
 
   const req_data = {
     url: baseUrl,

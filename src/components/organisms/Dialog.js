@@ -44,6 +44,24 @@ import {
   resultMapping as fallbackResultMapping,
   typeOptions as fallbackTypeOptions,
 } from "./dialogConstants";
+import {
+  BILLING_TYPE_OPTIONS,
+  fetchMatterPicklistMetadata,
+  getAllowedMatterProgressOptions,
+  getMatterLayoutId,
+  loadMatterContextForStakeholder,
+  MATTER_MODULE,
+  normalizeMatterPicklistValue,
+  resolveMatterProgressForStage,
+} from "../../services/matterHistoryService";
+
+const DEFAULT_CATEGORY = "Communication & Meetings";
+const EMPTY_MATTER_METADATA = {
+  layoutId: null,
+  stageOptions: [],
+  progressOptions: [],
+  progressByStage: {},
+};
 
 const VisuallyHiddenInput = styled("input")({
   clip: "rect(0 0 0 0)",
@@ -89,6 +107,15 @@ export function Dialog({
   const [loadedAttachmentFromRecord, setLoadedAttachmentFromRecord] =
     React.useState();
   const [formData, setFormData] = React.useState(selectedRowData || {}); // Form data state
+  const [matterMetadata, setMatterMetadata] = React.useState(
+    EMPTY_MATTER_METADATA
+  );
+  const [isCreateMatterLoading, setIsCreateMatterLoading] =
+    React.useState(false);
+  const [isStoredMatterLoading, setIsStoredMatterLoading] =
+    React.useState(false);
+  const isMatterContextLoading =
+    isCreateMatterLoading || isStoredMatterLoading;
   const configuredDurationOptions = picklistConfig
     ? getDurationOptionsFromConfig(picklistConfig)
     : fallbackDurationOptions;
@@ -107,7 +134,9 @@ export function Dialog({
     !configuredTypeOptions.includes(formData.type)
       ? [formData.type, ...configuredTypeOptions]
       : configuredTypeOptions;
-  const defaultType = configuredTypeOptions[0] || "";
+  const defaultType = configuredTypeOptions.includes(DEFAULT_CATEGORY)
+    ? DEFAULT_CATEGORY
+    : configuredTypeOptions[0] || DEFAULT_CATEGORY;
   const defaultResult = getResultOptions(defaultType, picklistConfig)[0] || "";
   const defaultDuration = configuredDurationOptions[0] ?? null;
   const defaultRegarding =
@@ -137,6 +166,18 @@ export function Dialog({
     message: "",
     severity: "success",
   });
+
+  React.useLayoutEffect(() => {
+    setMatterMetadata(EMPTY_MATTER_METADATA);
+    if (!openDialog) {
+      setIsCreateMatterLoading(false);
+      setIsStoredMatterLoading(false);
+      return;
+    }
+
+    setIsCreateMatterLoading(!selectedRowData);
+    setIsStoredMatterLoading(Boolean(selectedRowData));
+  }, [openDialog, selectedRowData]);
 
   const handleSelectFile = async (e) => {
     e.preventDefault();
@@ -204,10 +245,16 @@ export function Dialog({
           Participants: selectedRowData?.Participants || [],
           result: selectedRowData?.result || defaultResult,
           type: selectedRowData?.type || defaultType,
-          duration: selectedRowData?.duration || defaultDuration,
+          duration: selectedRowData?.duration ?? defaultDuration,
           regarding: selectedRowData?.regarding || defaultRegarding,
           details: selectedRowData?.details || "",
           stakeHolder: stakeHolderValue,
+          matter: selectedRowData?.matter || null,
+          matterNo: selectedRowData?.matterNo || "",
+          currentStage: selectedRowData?.currentStage || "",
+          matterProgress: selectedRowData?.matterProgress || "",
+          billingType:
+            selectedRowData?.billingType || BILLING_TYPE_OPTIONS[0],
           date_time: selectedRowData?.date_time
             ? dayjs(selectedRowData.date_time)
             : dayjs(),
@@ -237,6 +284,157 @@ export function Dialog({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- form init; ownerList, setSelectedContacts, ZOHO are stable
   }, [openDialog, selectedRowData, loggedInUser, currentContact, currentModuleData, picklistConfig]);
+
+  React.useEffect(() => {
+    if (!openDialog || !selectedRowData) {
+      setIsStoredMatterLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const historyId =
+      selectedRowData?.history_id ||
+      selectedRowData?.historyDetails?.id ||
+      selectedRowData?.id;
+
+    if (!historyId) {
+      setIsStoredMatterLoading(false);
+      return undefined;
+    }
+
+    setIsStoredMatterLoading(true);
+    setMatterMetadata(EMPTY_MATTER_METADATA);
+
+    const loadStoredMatterSnapshot = async () => {
+      try {
+        const response = await ZOHO.CRM.API.getRecord({
+          Entity: "History1",
+          RecordID: historyId,
+          approved: "both",
+        });
+        const history = response?.data?.[0];
+        if (!history || cancelled) return;
+
+        const matterId = history?.Matter?.id || null;
+        let layoutId = selectedRowData?.matter?.layoutId || null;
+        if (matterId) {
+          try {
+            const matterResponse = await ZOHO.CRM.API.getRecord({
+              Entity: MATTER_MODULE,
+              RecordID: matterId,
+              approved: "both",
+            });
+            layoutId = getMatterLayoutId(matterResponse?.data?.[0]) || layoutId;
+          } catch (matterError) {
+            console.warn("Could not read stored matter layout:", matterError);
+          }
+        }
+
+        if (cancelled) return;
+        setFormData((previous) => ({
+          ...previous,
+          matter: matterId
+            ? {
+                id: matterId,
+                name:
+                  history?.Matter?.name ||
+                  history?.Matter?.Name ||
+                  previous?.matter?.name ||
+                  "",
+                layoutId,
+              }
+            : null,
+          matterNo: history?.Matter_No ?? previous.matterNo ?? "",
+          currentStage:
+            normalizeMatterPicklistValue(history?.Current_Stage) ||
+            previous.currentStage ||
+            "",
+          matterProgress:
+            normalizeMatterPicklistValue(history?.Matter_Progress) ||
+            previous.matterProgress ||
+            "",
+          billingType:
+            history?.Billing_Type ??
+            previous.billingType ??
+            BILLING_TYPE_OPTIONS[0],
+        }));
+
+        const metadata = await fetchMatterPicklistMetadata(layoutId);
+        if (!cancelled) setMatterMetadata(metadata);
+      } catch (error) {
+        console.warn("Could not load stored History1 matter snapshot:", error);
+        if (!cancelled) setMatterMetadata(EMPTY_MATTER_METADATA);
+      } finally {
+        if (!cancelled) setIsStoredMatterLoading(false);
+      }
+    };
+
+    loadStoredMatterSnapshot();
+    return () => {
+      cancelled = true;
+    };
+  }, [openDialog, selectedRowData, ZOHO]);
+
+  const selectedStakeholderId = formData?.stakeHolder?.id || null;
+
+  React.useEffect(() => {
+    if (!openDialog || selectedRowData) {
+      setIsCreateMatterLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const loadMatter = async () => {
+      setIsCreateMatterLoading(true);
+      setMatterMetadata(EMPTY_MATTER_METADATA);
+      try {
+        if (!selectedStakeholderId) {
+          const metadata = await fetchMatterPicklistMetadata();
+          if (cancelled) return;
+          setMatterMetadata(metadata);
+          setFormData((previous) => ({
+            ...previous,
+            matter: null,
+            matterNo: "",
+            currentStage: "",
+            matterProgress: "",
+          }));
+          return;
+        }
+
+        const { snapshot, metadata } =
+          await loadMatterContextForStakeholder(selectedStakeholderId);
+        if (cancelled) return;
+
+        setMatterMetadata(metadata);
+        setFormData((previous) => {
+          if (previous?.stakeHolder?.id !== selectedStakeholderId) {
+            return previous;
+          }
+          return {
+            ...previous,
+            ...snapshot,
+            billingType:
+              previous.billingType ||
+              snapshot.billingType ||
+              BILLING_TYPE_OPTIONS[0],
+          };
+        });
+      } catch (error) {
+        console.warn("Could not load stakeholder matter defaults:", error);
+        if (!cancelled) {
+          setMatterMetadata(EMPTY_MATTER_METADATA);
+        }
+      } finally {
+        if (!cancelled) setIsCreateMatterLoading(false);
+      }
+    };
+
+    loadMatter();
+    return () => {
+      cancelled = true;
+    };
+  }, [openDialog, selectedRowData, selectedStakeholderId]);
 
   React.useEffect(() => {
     const fetchHistoryData = async () => {
@@ -289,8 +487,47 @@ export function Dialog({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const withCurrentOption = (options, currentValue) =>
+    currentValue && !options.includes(currentValue)
+      ? [currentValue, ...options]
+      : options;
+  const stageOptions = withCurrentOption(
+    matterMetadata.stageOptions || [],
+    formData.currentStage
+  );
+  const allowedProgressOptions = getAllowedMatterProgressOptions(
+    matterMetadata,
+    formData.currentStage,
+    formData.matterProgress
+  );
+  const progressOptions = allowedProgressOptions;
+
+  const handleMatterStageChange = (newStage) => {
+    setFormData((previous) => {
+      return {
+        ...previous,
+        currentStage: newStage,
+        matterProgress: resolveMatterProgressForStage(
+          matterMetadata,
+          newStage,
+          previous.matterProgress
+        ),
+      };
+    });
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (isMatterContextLoading) {
+      setSnackbar({
+        open: true,
+        message: "Matter details are still loading. Please wait.",
+        severity: "info",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     let selectedParticipants = [];
@@ -321,7 +558,15 @@ export function Dialog({
           : formData.result,
       Stakeholder: formData.stakeHolder?.id ? { id: formData.stakeHolder.id } : null,
       History_Type: formData.type || "",
-      Duration: formData.duration ? String(formData.duration) : null,
+      Duration:
+        formData.duration !== null && formData.duration !== undefined
+          ? String(formData.duration)
+          : null,
+      Matter: formData.matter?.id ? { id: formData.matter.id } : null,
+      Matter_No: formData.matterNo || null,
+      Current_Stage: formData.currentStage || null,
+      Matter_Progress: formData.matterProgress || null,
+      Billing_Type: formData.billingType || BILLING_TYPE_OPTIONS[0],
       Date: formData.date_time
         ? dayjs(formData.date_time).format("YYYY-MM-DDTHH:mm:ssZ")
         : null,
@@ -737,13 +982,91 @@ export function Dialog({
           }}
         >
           <Grid container spacing={1}>
+            <Grid item xs={12} sm={6} md={3}>
+              <TextField
+                fullWidth
+                variant="standard"
+                label="Matter No"
+                value={formData.matterNo || ""}
+                InputProps={{
+                  readOnly: true,
+                  endAdornment: isMatterContextLoading ? (
+                    <InputAdornment position="end">
+                      <CircularProgress size={14} />
+                    </InputAdornment>
+                  ) : null,
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth variant="standard">
+                <InputLabel>Current Stage</InputLabel>
+                <Select
+                  value={formData.currentStage || ""}
+                  disabled={isMatterContextLoading}
+                  onChange={(event) =>
+                    handleMatterStageChange(event.target.value)
+                  }
+                  label="Current Stage"
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {stageOptions.map((stage) => (
+                    <MenuItem key={stage} value={stage}>
+                      {stage}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth variant="standard">
+                <InputLabel>Matter Progress</InputLabel>
+                <Select
+                  value={formData.matterProgress || ""}
+                  disabled={isMatterContextLoading}
+                  onChange={(event) =>
+                    handleInputChange("matterProgress", event.target.value)
+                  }
+                  label="Matter Progress"
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {progressOptions.map((progress) => (
+                    <MenuItem key={progress} value={progress}>
+                      {progress}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth variant="standard">
+                <InputLabel>Billing Type</InputLabel>
+                <Select
+                  value={formData.billingType || BILLING_TYPE_OPTIONS[0]}
+                  disabled={isMatterContextLoading}
+                  onChange={(event) =>
+                    handleInputChange("billingType", event.target.value)
+                  }
+                  label="Billing Type"
+                >
+                  {BILLING_TYPE_OPTIONS.map((billingType) => (
+                    <MenuItem key={billingType} value={billingType}>
+                      {billingType}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+
+          <Grid container spacing={1}>
             <Grid item xs={12} sm={6}>
               <FormControl
                 fullWidth
                 variant="standard"
                 sx={{ fontSize: "9pt" }}
               >
-                <InputLabel sx={{ fontSize: "9pt" }}>Type</InputLabel>
+                <InputLabel sx={{ fontSize: "9pt" }}>Category</InputLabel>
                 <Select
                   value={formData.type || ""} // Ensure a fallback value
                   onChange={(e) => {
@@ -759,7 +1082,7 @@ export function Dialog({
                     );
 
                   }}
-                  label="Type"
+                  label="Category"
                   sx={{
                     "& .MuiSelect-select": {
                       fontSize: "9pt",
@@ -781,7 +1104,7 @@ export function Dialog({
                 variant="standard"
                 sx={{ fontSize: "9pt" }}
               >
-                <InputLabel sx={{ fontSize: "9pt" }}>Result</InputLabel>
+                <InputLabel sx={{ fontSize: "9pt" }}>Activity Type</InputLabel>
                 <Select
                   value={formData.result || ""} // Ensure a fallback value
                   onChange={(e) => {
@@ -794,7 +1117,7 @@ export function Dialog({
                       handleInputChange("type", correspondingType);
                     }
                   }}
-                  label="Result"
+                  label="Activity Type"
                   sx={{
                     "& .MuiSelect-select": {
                       fontSize: "9pt",
@@ -1196,7 +1519,7 @@ export function Dialog({
             <Button 
               type="submit" 
               variant="contained" 
-              disabled={isSubmitting}
+              disabled={isSubmitting || isMatterContextLoading}
               sx={{ fontSize: "9pt", display: "flex", alignItems: "center", gap: 1 }}
             >
               {isSubmitting && <CircularProgress size={16} />}
