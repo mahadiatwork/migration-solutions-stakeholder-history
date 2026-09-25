@@ -1,13 +1,11 @@
 import {
   PICKLIST_CONFIG_MODULE,
   PICKLIST_CONFIG_FIELDS,
-  PICKLIST_CATEGORIES,
   dataCenterMap,
   conn_name,
 } from "../config/config";
 import {
   mandatoryActivityTypes,
-  mandatoryCategoryOptions,
   typeOptions as defaultTypeOptions,
   resultMapping as defaultResultMapping,
   durationOptions as defaultDurationOptions,
@@ -51,18 +49,13 @@ const loadPicklistConfig = async () => {
   try {
     if (!ZOHO?.CRM) return buildFallbackConfig();
 
-    let records = await fetchViaSdk();
-    if (!records.length) records = await fetchViaCoql();
+    let readResult = await fetchViaSdk();
+    if (!readResult.reached) readResult = await fetchViaCoql();
 
-    const activeRecords = records.filter(isActive);
-    if (!activeRecords.length) {
-      console.warn(
-        "Widget_Picklist_Config returned no active records; using defaults."
-      );
-      return buildFallbackConfig();
+    if (!readResult.reached) {
+      console.warn("Widget_Picklist_Config is unavailable; using defaults.");
     }
-
-    return groupRecords(activeRecords);
+    return buildConfigFromReadResult(readResult);
   } catch (error) {
     console.warn(
       "Widget_Picklist_Config could not be loaded; using defaults.",
@@ -100,25 +93,77 @@ const isActive = (record) => {
   );
 };
 
+export const buildConfigFromReadResult = ({ reached, records = [] }) =>
+  reached
+    ? groupRecords(records.filter(isActive))
+    : buildFallbackConfig();
+
 const extractRecords = (response) => {
   if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.data?.data)) return response.data.data;
   if (Array.isArray(response)) return response;
   return [];
 };
 
+const responseEntries = (response) => [
+  response,
+  response?.data,
+  ...(Array.isArray(response?.data) ? response.data : []),
+  ...(Array.isArray(response?.data?.data) ? response.data.data : []),
+].filter((entry) => entry && typeof entry === "object");
+
+const isUnavailableResponse = (response) =>
+  responseEntries(response).some(
+    (entry) =>
+      entry?.code === "INVALID_MODULE" ||
+      entry?.code === "INVALID_MODULE_API_NAME"
+  );
+
+const isErrorResponse = (response) =>
+  responseEntries(response).some((entry) => {
+    const code = typeof entry?.code === "string" ? entry.code : "";
+    return (
+      entry?.status === "error" ||
+      entry?.status === "failure" ||
+      Number(entry?.statusCode) >= 400 ||
+      (code !== "" &&
+        code !== "SUCCESS" &&
+        code !== "NO_DATA" &&
+        code !== "NO_CONTENT" &&
+        code !== "200")
+    );
+  });
+
+const isSuccessfulEmptyResponse = (response) =>
+  responseEntries(response).some(
+    (entry) => entry?.code === "NO_DATA" || entry?.code === "NO_CONTENT"
+  );
+
+const hasRecordPayload = (response) =>
+  Array.isArray(response?.data) ||
+  Array.isArray(response?.data?.data) ||
+  Array.isArray(response);
+
+const hasMoreRecords = (response) => {
+  const value = response?.info?.more_records ?? response?.data?.info?.more_records;
+  return value === true || value === "true";
+};
+
 const fetchViaSdk = async () => {
   for (const entity of MODULE_API_NAMES) {
-    const records = await paginateSdk(entity);
-    if (records.length) return records;
+    const result = await paginateSdk(entity);
+    if (result.reached) return result;
   }
-  return [];
+  return { reached: false, records: [] };
 };
 
 const paginateSdk = async (entity) => {
   const records = [];
   const perPage = 200;
+  const seenPages = new Set();
+  let page = 1;
 
-  for (let page = 1; page <= 10; page += 1) {
+  while (true) {
     let response;
     try {
       if (typeof ZOHO.CRM.API.getAllRecords === "function") {
@@ -136,26 +181,43 @@ const paginateSdk = async (entity) => {
           page,
         });
       } else {
-        return [];
+        return { reached: false, records: [] };
       }
     } catch (error) {
       console.warn(`Pick-list SDK read failed for ${entity}:`, error);
-      return [];
+      return { reached: false, records: [] };
     }
 
-    if (response?.status === "error" || response?.code === "INVALID_MODULE") {
-      return [];
+    if (isUnavailableResponse(response)) {
+      return { reached: false, records: [] };
+    }
+
+    if (isSuccessfulEmptyResponse(response)) {
+      return { reached: true, records };
+    }
+
+    if (isErrorResponse(response)) {
+      return { reached: false, records: [] };
+    }
+
+    if (!hasRecordPayload(response)) {
+      return { reached: false, records: [] };
     }
 
     const chunk = extractRecords(response);
+    const hasMore = hasMoreRecords(response);
+    const signature = JSON.stringify(chunk);
+    if (hasMore && seenPages.has(signature)) {
+      return { reached: false, records: [] };
+    }
+    seenPages.add(signature);
     records.push(...chunk);
-    const hasMore =
-      response?.info?.more_records === true ||
-      response?.info?.more_records === "true";
-    if (chunk.length < perPage || !hasMore) break;
+    if (!hasMore) break;
+    if (chunk.length === 0) return { reached: false, records: [] };
+    page += 1;
   }
 
-  return records;
+  return { reached: true, records };
 };
 
 const parseCoqlResponse = (response) => {
@@ -173,46 +235,142 @@ const parseCoqlResponse = (response) => {
   const candidates = [statusMessage, response?.details, response].filter(
     (candidate) => candidate && typeof candidate === "object"
   );
+  let records = null;
+  let hasMoreMetadata = false;
+  let moreRecords = false;
   for (const candidate of candidates) {
-    if (Array.isArray(candidate.data) && candidate.data.length) {
-      return candidate.data;
+    if (Array.isArray(candidate.data)) {
+      records = candidate.data;
+    }
+    if (candidate?.info?.more_records != null) {
+      hasMoreMetadata = true;
+      moreRecords =
+        candidate.info.more_records === true ||
+        candidate.info.more_records === "true";
     }
   }
-  return [];
+  return { records, hasMoreMetadata, moreRecords };
 };
 
+const coqlResponseEntries = (response) => {
+  const rawStatusMessage = response?.details?.statusMessage;
+  let parsedStatusMessage = rawStatusMessage;
+  if (typeof rawStatusMessage === "string" && rawStatusMessage.trim()) {
+    try {
+      parsedStatusMessage = JSON.parse(rawStatusMessage);
+    } catch {
+      parsedStatusMessage = null;
+    }
+  }
+
+  return [
+    response,
+    ...(response?.data &&
+    typeof response.data === "object" &&
+    !Array.isArray(response.data)
+      ? [response.data]
+      : []),
+    response?.details,
+    parsedStatusMessage,
+    ...(Array.isArray(response?.data) ? response.data : []),
+    ...(Array.isArray(parsedStatusMessage?.data)
+      ? parsedStatusMessage.data
+      : []),
+  ].filter((entry) => entry && typeof entry === "object");
+};
+
+const isInvalidOrFailedCoqlResponse = (response) =>
+  coqlResponseEntries(response).some((entry) => {
+    const code = typeof entry?.code === "string" ? entry.code : "";
+    return (
+      entry?.status === "error" ||
+      entry?.status === "failure" ||
+      Number(entry?.statusCode) >= 400 ||
+      (code !== "" &&
+        code !== "SUCCESS" &&
+        code !== "NO_DATA" &&
+        code !== "NO_CONTENT" &&
+        code !== "200")
+    );
+  });
+
+const isSuccessfulEmptyCoqlResponse = (response) =>
+  coqlResponseEntries(response).some(
+    (entry) => entry?.code === "NO_DATA" || entry?.code === "NO_CONTENT"
+  );
+
 const fetchViaCoql = async () => {
-  if (!ZOHO?.CRM?.CONNECTION?.invoke) return [];
+  if (!ZOHO?.CRM?.CONNECTION?.invoke) {
+    return { reached: false, records: [] };
+  }
 
   const { name, category, parentType, sortOrder, active } =
     PICKLIST_CONFIG_FIELDS;
+  const pageSize = 2000;
 
   for (const moduleApiName of MODULE_API_NAMES) {
-    const selectQuery = `select ${name}, ${category}, ${parentType}, ${sortOrder}, ${active} from ${moduleApiName} where ${active} = true order by ${sortOrder} asc LIMIT 0, 2000`;
-    try {
-      const response = await ZOHO.CRM.CONNECTION.invoke(conn_name, {
-        url: `${dataCenterMap.AU}/crm/v8/coql`,
-        method: "POST",
-        param_type: 2,
-        parameters: { select_query: selectQuery },
-      });
-      const records = parseCoqlResponse(response);
-      if (records.length) return records;
-    } catch (error) {
-      console.warn(`Pick-list COQL read failed for ${moduleApiName}:`, error);
+    const records = [];
+    const seenPages = new Set();
+    let offset = 0;
+
+    while (true) {
+      const selectQuery = `select ${name}, ${category}, ${parentType}, ${sortOrder}, ${active} from ${moduleApiName} where ${active} = true order by ${sortOrder} asc LIMIT ${offset}, ${pageSize}`;
+      try {
+        const response = await ZOHO.CRM.CONNECTION.invoke(conn_name, {
+          url: `${dataCenterMap.AU}/crm/v8/coql`,
+          method: "POST",
+          param_type: 2,
+          parameters: { select_query: selectQuery },
+        });
+        if (isSuccessfulEmptyCoqlResponse(response)) {
+          return { reached: true, records };
+        }
+        if (isInvalidOrFailedCoqlResponse(response)) break;
+
+        const parsed = parseCoqlResponse(response);
+        if (parsed.records === null) break;
+
+        const signature = JSON.stringify(parsed.records);
+        const shouldContinue = parsed.hasMoreMetadata
+          ? parsed.moreRecords
+          : parsed.records.length === pageSize;
+        if (shouldContinue && seenPages.has(signature)) break;
+        seenPages.add(signature);
+        records.push(...parsed.records);
+
+        if (!shouldContinue) return { reached: true, records };
+        if (parsed.records.length === 0) break;
+        offset += pageSize;
+      } catch (error) {
+        console.warn(`Pick-list COQL read failed for ${moduleApiName}:`, error);
+        break;
+      }
     }
   }
 
-  return [];
+  return { reached: false, records: [] };
 };
 
 const pushUnique = (list, value) => {
   if (value && !list.includes(value)) list.push(value);
 };
 
-const groupRecords = (records) => {
+const sortRank = (value) => {
+  const rank = Number(value);
+  return Number.isFinite(rank) ? rank : 9999;
+};
+
+const normalizedCategory = (value) => {
+  const category = fieldValue(value).trim().toLowerCase();
+  if (category === "type" || category === "history type") return "type";
+  if (category === "result" || category === "history result") return "result";
+  if (category === "regarding") return "regarding";
+  if (category === "duration") return "duration";
+  return "";
+};
+
+export const groupRecords = (records) => {
   const { name, category, parentType, sortOrder } = PICKLIST_CONFIG_FIELDS;
-  const { TYPE, RESULT, REGARDING, DURATION } = PICKLIST_CATEGORIES;
   const types = [];
   const results = {};
   const regarding = {};
@@ -220,26 +378,25 @@ const groupRecords = (records) => {
 
   const sortedRecords = [...records].sort(
     (left, right) =>
-      (Number(left?.[sortOrder]) || 9999) -
-      (Number(right?.[sortOrder]) || 9999)
+      sortRank(left?.[sortOrder]) - sortRank(right?.[sortOrder])
   );
 
   for (const record of sortedRecords) {
     const value = fieldValue(record?.[name]);
-    const recordCategory = fieldValue(record?.[category]);
+    const recordCategory = normalizedCategory(record?.[category]);
     const parent = fieldValue(record?.[parentType]) || "_default";
     if (!value) continue;
 
-    if (recordCategory === TYPE) pushUnique(types, value);
-    if (recordCategory === RESULT) {
+    if (recordCategory === "type") pushUnique(types, value);
+    if (recordCategory === "result") {
       if (!results[parent]) results[parent] = [];
       pushUnique(results[parent], value);
     }
-    if (recordCategory === REGARDING) {
+    if (recordCategory === "regarding") {
       if (!regarding[parent]) regarding[parent] = [];
       pushUnique(regarding[parent], value);
     }
-    if (recordCategory === DURATION) {
+    if (recordCategory === "duration") {
       const duration = Number.parseInt(value, 10);
       if (Number.isFinite(duration)) pushUnique(durations, duration);
     }
@@ -253,33 +410,28 @@ const groupRecords = (records) => {
   }
 
   return {
-    types: types.length ? types : defaultTypeOptions,
-    results: Object.keys(results).length ? results : null,
-    resultMapping: Object.keys(resultMapping).length
-      ? resultMapping
-      : defaultResultMapping,
-    regarding: Object.keys(regarding).length ? regarding : null,
-    durations: durations.length ? durations : defaultDurationOptions,
+    types,
+    results,
+    resultMapping,
+    regarding,
+    durations,
     _source: "custom_module",
   };
 };
 
-const prependUnique = (mandatory, configured = []) => [
-  ...mandatory,
-  ...configured.filter((value) => !mandatory.includes(value)),
-];
-
-export const getTypeOptionsFromConfig = (config) =>
-  prependUnique(
-    mandatoryCategoryOptions,
-    config?.types?.length ? config.types : defaultTypeOptions
-  );
+export const getTypeOptionsFromConfig = (config) => {
+  if (config?._source === "custom_module") return config.types || [];
+  return config?.types?.length ? config.types : defaultTypeOptions;
+};
 
 export const getDurationOptionsFromConfig = (config) => {
   const configuredDurations = (config?.durations || [])
     .map((value) => Number(value))
     .filter(Number.isFinite);
-  return prependUnique(defaultDurationOptions, configuredDurations);
+  if (config?._source === "custom_module") return configuredDurations;
+  return configuredDurations.length
+    ? configuredDurations
+    : defaultDurationOptions;
 };
 
 const mandatoryResultMapping = Object.fromEntries(
@@ -289,10 +441,15 @@ const mandatoryResultMapping = Object.fromEntries(
   ])
 );
 
-export const getResultMappingFromConfig = (config) => ({
-  ...defaultResultMapping,
-  ...(config?.resultMapping && Object.keys(config.resultMapping).length
-    ? config.resultMapping
-    : {}),
-  ...mandatoryResultMapping,
-});
+export const getResultMappingFromConfig = (config) => {
+  if (config?._source === "custom_module") {
+    return config.resultMapping || {};
+  }
+  return {
+    ...defaultResultMapping,
+    ...(config?.resultMapping && Object.keys(config.resultMapping).length
+      ? config.resultMapping
+      : {}),
+    ...mandatoryResultMapping,
+  };
+};

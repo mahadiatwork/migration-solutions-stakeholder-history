@@ -3,6 +3,14 @@
 import { mandatoryActivityTypes } from "./dialogConstants";
 
 export const getResultOptions = (type, picklistConfig) => {
+  if (picklistConfig?._source === "custom_module") {
+    return (
+      picklistConfig?.results?.[type] ??
+      picklistConfig?.results?._default ??
+      []
+    );
+  }
+
   if (mandatoryActivityTypes[type]) return mandatoryActivityTypes[type];
 
   const configuredResults =
@@ -48,14 +56,34 @@ export const getResultOptions = (type, picklistConfig) => {
 };
 
 
-export const getRegardingOptions = (type, existingValue, picklistConfig) => {
+export const getRegardingOptions = (
+  type,
+  existingValue,
+  picklistConfig,
+  preserveExisting = false
+) => {
   const configuredRegarding =
     picklistConfig?.regarding?.[type] ?? picklistConfig?.regarding?._default;
+  if (picklistConfig?._source === "custom_module") {
+    const values = [...(configuredRegarding || [])];
+    const safeExistingValue =
+      typeof existingValue === "string" ? existingValue : "";
+    if (
+      preserveExisting &&
+      safeExistingValue.trim() &&
+      !values.includes(safeExistingValue)
+    ) {
+      values.unshift(safeExistingValue);
+    }
+    return values;
+  }
+
   if (configuredRegarding?.length) {
     const values = [...configuredRegarding];
     const safeExistingValue =
       typeof existingValue === "string" ? existingValue : "";
     if (
+      preserveExisting &&
       safeExistingValue.trim() &&
       !values.includes(safeExistingValue)
     ) {
@@ -96,6 +124,7 @@ export const getRegardingOptions = (type, existingValue, picklistConfig) => {
   const safeExistingValue =
     typeof existingValue === "string" ? existingValue : "";
   if (
+    preserveExisting &&
     safeExistingValue.trim() &&
     !predefinedOptions.includes(safeExistingValue)
   ) {

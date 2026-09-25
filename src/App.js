@@ -265,22 +265,22 @@ const App = () => {
           obj?.History_Type ??
           obj?.["Contact_History_Info.History_Type"] ??
           obj?.Contact_History_Info?.History_Type ??
-          "Unknown Category";
+          "";
         const historyResult =
           obj?.History_Result ??
           obj?.["Contact_History_Info.History_Result"] ??
           obj?.Contact_History_Info?.History_Result ??
-          "No Activity Type";
+          "";
         const duration =
           obj?.Duration ??
           obj?.["Contact_History_Info.Duration"] ??
           obj?.Contact_History_Info?.Duration ??
-          "N/A";
+          null;
         const regarding =
           obj?.Regarding ??
           obj?.["Contact_History_Info.Regarding"] ??
           obj?.Contact_History_Info?.Regarding ??
-          "No Regarding";
+          "";
         const historyDetailsPlain =
           obj?.History_Details_Plain ??
           obj?.["Contact_History_Info.History_Details_Plain"] ??
@@ -403,29 +403,10 @@ const App = () => {
 
       setRelatedListData(dedupedData);
       
-      const types = data
-        ?.map(
-          (el) =>
-            el?.History_Type ??
-            el?.["Contact_History_Info.History_Type"] ??
-            el?.Contact_History_Info?.History_Type
-        )
-        ?.filter((el) => el !== undefined && el !== null);
-
-      const sortedTypes = [...new Set(types)].sort((a, b) =>
-        a.localeCompare(b)
-      ); // Sort alphabetically
-
       const config = await fetchPicklistConfig();
       setPicklistConfig(config);
       const configuredTypes = getTypeOptionsFromConfig(config);
-
-      const sortedTypesWithAdditional = [
-        ...configuredTypes,
-        ...sortedTypes.filter((type) => !configuredTypes.includes(type)),
-      ];
-
-      setTypeList(sortedTypesWithAdditional);
+      setTypeList(configuredTypes);
 
       setInitPageContent(null);
     } catch (error) {
@@ -448,10 +429,7 @@ const App = () => {
       .then((config) => {
         if (cancelled) return;
         setPicklistConfig(config);
-        setTypeList((previousTypes) =>
-          [...new Set([...getTypeOptionsFromConfig(config), ...previousTypes])]
-            .sort((left, right) => left.localeCompare(right))
-        );
+        setTypeList(getTypeOptionsFromConfig(config));
       })
       .catch((error) => {
         console.warn("Unable to refresh Widget_Picklist_Config:", error);
@@ -500,10 +478,10 @@ const App = () => {
       id: newRecord.id,
       name: updatedName,
       date_time: newRecord.Date || dayjs().format(), // Ensure date is consistent
-      type: newRecord.History_Type || "Unknown Category",
-      result: newRecord.History_Result || "No Activity Type",
-      duration: newRecord.Duration ?? "N/A",
-      regarding: newRecord.Regarding || "No Regarding",
+      type: newRecord.History_Type || "",
+      result: newRecord.History_Result || "",
+      duration: newRecord.Duration ?? null,
+      regarding: newRecord.Regarding || "",
       details: newRecord.History_Details_Plain || "No Details",
       ownerName: newRecord.Owner?.full_name || "Unknown Owner",
       historyDetails: {

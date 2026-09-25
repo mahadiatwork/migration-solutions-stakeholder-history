@@ -128,22 +128,27 @@ export function Dialog({
   const configuredTypeOptions = picklistConfig
     ? getTypeOptionsFromConfig(picklistConfig)
     : fallbackTypeOptions;
+  const isCustomModule = picklistConfig?._source === "custom_module";
   const typeOptions =
     selectedRowData &&
     formData?.type &&
     !configuredTypeOptions.includes(formData.type)
       ? [formData.type, ...configuredTypeOptions]
       : configuredTypeOptions;
-  const defaultType = configuredTypeOptions.includes(DEFAULT_CATEGORY)
-    ? DEFAULT_CATEGORY
-    : configuredTypeOptions[0] || DEFAULT_CATEGORY;
+  const defaultType = isCustomModule
+    ? configuredTypeOptions[0] || ""
+    : configuredTypeOptions.includes(DEFAULT_CATEGORY)
+      ? DEFAULT_CATEGORY
+      : configuredTypeOptions[0] || DEFAULT_CATEGORY;
   const defaultResult = getResultOptions(defaultType, picklistConfig)[0] || "";
   const defaultDuration = configuredDurationOptions[0] ?? null;
   const defaultRegarding =
     getRegardingOptions(defaultType, "", picklistConfig)[0] || "";
   const durationOptions =
     selectedRowData &&
-    formData?.duration != null &&
+    formData?.duration !== null &&
+    formData?.duration !== undefined &&
+    formData?.duration !== "" &&
     !configuredDurationOptions.some(
       (duration) => Number(duration) === Number(formData.duration)
     )
@@ -243,10 +248,16 @@ export function Dialog({
 
         const base = {
           Participants: selectedRowData?.Participants || [],
-          result: selectedRowData?.result || defaultResult,
-          type: selectedRowData?.type || defaultType,
-          duration: selectedRowData?.duration ?? defaultDuration,
-          regarding: selectedRowData?.regarding || defaultRegarding,
+          result: selectedRowData
+            ? selectedRowData?.result ?? ""
+            : defaultResult,
+          type: selectedRowData ? selectedRowData?.type ?? "" : defaultType,
+          duration: selectedRowData
+            ? selectedRowData?.duration ?? null
+            : defaultDuration,
+          regarding: selectedRowData
+            ? selectedRowData?.regarding ?? ""
+            : defaultRegarding,
           details: selectedRowData?.details || "",
           stakeHolder: stakeHolderValue,
           matter: selectedRowData?.matter || null,
@@ -559,7 +570,9 @@ export function Dialog({
       Stakeholder: formData.stakeHolder?.id ? { id: formData.stakeHolder.id } : null,
       History_Type: formData.type || "",
       Duration:
-        formData.duration !== null && formData.duration !== undefined
+        formData.duration !== "" &&
+        formData.duration !== null &&
+        formData.duration !== undefined
           ? String(formData.duration)
           : null,
       Matter: formData.matter?.id ? { id: formData.matter.id } : null,

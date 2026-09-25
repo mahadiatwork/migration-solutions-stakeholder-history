@@ -8,9 +8,25 @@ const RegardingField = ({
   selectedRowData,
   picklistConfig,
 }) => {
-  const existingValue = formData?.regarding || selectedRowData?.regarding || "";
+  const existingValue =
+    formData?.regarding ?? selectedRowData?.regarding ?? "";
   const predefinedOptions =
-    getRegardingOptions(formData?.type, existingValue, picklistConfig) || [];
+    getRegardingOptions(
+      formData?.type,
+      existingValue,
+      picklistConfig,
+      Boolean(selectedRowData)
+    ) || [];
+  const isCustomModule = picklistConfig?._source === "custom_module";
+  const configuredRegarding =
+    picklistConfig?.regarding?.[formData?.type] ??
+    picklistConfig?.regarding?._default ??
+    [];
+  const manualOtherEnabled =
+    !isCustomModule || configuredRegarding.includes("Other");
+  const displayedOptions = manualOtherEnabled
+    ? predefinedOptions.filter((option) => option !== "Other")
+    : predefinedOptions;
 
   const [selectedValue, setSelectedValue] = useState("");
   const [manualInput, setManualInput] = useState("");
@@ -21,26 +37,27 @@ const RegardingField = ({
       if (predefinedOptions.includes(existingValue)) {
         setSelectedValue(existingValue);
         setManualInput("");
-      } else {
+      } else if (manualOtherEnabled) {
         setSelectedValue("Other");
         setManualInput(existingValue);
+      } else {
+        setSelectedValue("");
+        setManualInput("");
       }
     } else {
       setSelectedValue("");
       setManualInput("");
     }
-    if (existingValue !== "Other") {
-      setShowManualInput(false); 
-    }
+    setShowManualInput(manualOtherEnabled && existingValue === "Other");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- do not reset while manual text is being entered
-  }, [formData.type, selectedRowData?.id]);
+  }, [formData.type, selectedRowData?.id, picklistConfig]);
   
 
   const handleSelectChange = (event) => {
     const value = event.target.value;
     setSelectedValue(value);
   
-    if (value === "Other") {
+    if (value === "Other" && manualOtherEnabled) {
       setShowManualInput(true); 
       setManualInput(""); 
       handleInputChange("regarding", "Other"); // ✅ Set "Other" in formData
@@ -72,14 +89,16 @@ const RegardingField = ({
           onChange={handleSelectChange}
           sx={{ "& .MuiInputBase-root": { padding: "0 !important" }, fontSize: "9pt" }}
         >
-          {(Array.isArray(predefinedOptions) ? predefinedOptions : []).map((option) => (
+          {(Array.isArray(displayedOptions) ? displayedOptions : []).map((option) => (
             <MenuItem key={option} value={option} sx={{ fontSize: "9pt" }}>
               {option}
             </MenuItem>
           ))}
-          <MenuItem value="Other" sx={{ fontSize: "9pt" }}>
-            Other (Manually enter)
-          </MenuItem>
+          {manualOtherEnabled && (
+            <MenuItem value="Other" sx={{ fontSize: "9pt" }}>
+              Other (Manually enter)
+            </MenuItem>
+          )}
         </Select>
       </FormControl>
 

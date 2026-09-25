@@ -11,7 +11,7 @@ export const conn_name = "zoho_crm_conn";
 
 // Zoho CRM custom module used to manage widget pick-list labels and order.
 // The hard-coded values in dialogConstants.js/helperFunc.js remain the
-// compatibility fallback when the module is unavailable or empty.
+// compatibility fallback only when the module cannot be reached.
 export const PICKLIST_CONFIG_MODULE = "Widget_Picklist_Config";
 
 export const PICKLIST_CONFIG_FIELDS = {
