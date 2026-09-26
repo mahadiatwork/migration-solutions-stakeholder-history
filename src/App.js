@@ -131,7 +131,11 @@ const App = () => {
   };
 
   const handleCloseEditDialog = (updatedRowData) => {
-    if (updatedRowData) {
+    if (updatedRowData?.deleted) {
+      setRelatedListData((prevData) =>
+        prevData.filter((item) => String(item.history_id || item.id) !== String(updatedRowData.id))
+      );
+    } else if (updatedRowData) {
       setRelatedListData((prevData) =>
         prevData.map((item) =>
           item.id === updatedRowData.id

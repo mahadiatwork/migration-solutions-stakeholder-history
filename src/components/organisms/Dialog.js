@@ -165,6 +165,7 @@ export function Dialog({
       ? [formData.result, ...configuredResultOptions]
       : configuredResultOptions;
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [openMoveConfirmation, setOpenMoveConfirmation] = React.useState(false);
   // console.log({ formData });
   const [snackbar, setSnackbar] = React.useState({
     open: false,
@@ -292,6 +293,7 @@ export function Dialog({
     } else {
       // Reset formData to avoid stale data
       setFormData({});
+      setOpenMoveConfirmation(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- form init; ownerList, setSelectedContacts, ZOHO are stable
   }, [openDialog, selectedRowData, loggedInUser, currentContact, currentModuleData, picklistConfig]);
@@ -1487,7 +1489,7 @@ export function Dialog({
                 Delete
               </Button>
               <Button
-                onClick={handleMoveToApplication}
+                onClick={() => setOpenMoveConfirmation(true)}
                 variant="outlined"
                 color="success"
                 disabled={isSubmitting || isApplicationsLoading}
@@ -1541,18 +1543,45 @@ export function Dialog({
           </Box>
         </DialogActions>
       </MUIDialog>
+      <MUIDialog
+        open={openMoveConfirmation}
+        onClose={() => setOpenMoveConfirmation(false)}
+        aria-labelledby="move-saved-history-title"
+      >
+        <DialogContent>
+          <Typography id="move-saved-history-title" variant="h6" gutterBottom>
+            Move the saved history?
+          </Typography>
+          <Typography variant="body2">
+            The move uses the version saved in Zoho. Changes made in this form will not be
+            included. To keep those changes, close this message, select Update, then reopen
+            the history and move it.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenMoveConfirmation(false)}>
+            Keep editing
+          </Button>
+          <Button
+            onClick={() => {
+              setOpenMoveConfirmation(false);
+              handleMoveToApplication();
+            }}
+            variant="contained"
+          >
+            Continue with saved version
+          </Button>
+        </DialogActions>
+      </MUIDialog>
       <ApplicationDialog
         openApplicationDialog={openApplicationDialog}
         handleApplicationDialogClose={handleApplicationDialogClose}
         applications={applications}
         isApplicationsLoading={isApplicationsLoading}
         ZOHO={ZOHO}
-        handleDelete={handleDelete}
-        formData={formData}
-        historyContacts={historyContacts}
         selectedRowData={selectedRowData}
-        currentContact={currentContact}
-        selectedOwner={selectedOwner}
+        stakeholderId={currentModuleData?.id}
+        onMoved={(sourceId) => handleCloseDialog({ deleted: true, id: sourceId })}
       />
       <Snackbar
         open={snackbar.open}

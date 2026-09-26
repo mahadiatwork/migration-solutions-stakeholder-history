@@ -7,6 +7,97 @@ import {
 } from "../config/config";
 
 const ZOHO = window.ZOHO;
+const ATTACHMENT_PAGE_SIZE = 200;
+const MAX_ATTACHMENT_PAGES = 50;
+
+export const parseAttachmentPageResponse = (response, perPage = ATTACHMENT_PAGE_SIZE) => {
+  const raw = response?.details?.statusMessage;
+  const explicitNoContent =
+    Number(response?.statusCode) === 204 ||
+    Number(response?.details?.statusCode) === 204 ||
+    String(response?.statusText || "").toLowerCase() === "nocontent" ||
+    String(response?.details?.statusText || "").toLowerCase() === "nocontent";
+  let payload = raw;
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      if (explicitNoContent && /^no\s+content$/i.test(raw.trim())) {
+        payload = { code: "NO_CONTENT" };
+      } else {
+        throw new Error("Could not parse the attachment response.");
+      }
+    }
+  }
+
+  const error = [payload, response?.details, response].find((item) =>
+    item && typeof item === "object" &&
+    (String(item.status || "").toLowerCase() === "error" ||
+      (item.code != null &&
+        !["SUCCESS", "200", "NO_CONTENT"].includes(String(item.code).toUpperCase())))
+  );
+  if (error) throw new Error(error.message || "Attachment request failed.");
+
+  const httpFailure = [payload, response?.details, response].find((item) =>
+    item && typeof item === "object" && Number(item.statusCode) >= 400
+  );
+  if (httpFailure) {
+    throw new Error(httpFailure.message || `Attachment request failed with HTTP ${httpFailure.statusCode}.`);
+  }
+
+  const flags = [];
+  for (const item of [payload, response?.details, response]) {
+    const info = item?.info;
+    if (info == null) continue;
+    if (typeof info !== "object" || Array.isArray(info)) {
+      throw new Error("Attachment response has invalid pagination info.");
+    }
+    if (Object.prototype.hasOwnProperty.call(info, "more_records")) {
+      if (typeof info.more_records !== "boolean") {
+        throw new Error("Attachment response has invalid pagination info.");
+      }
+      flags.push(info.more_records);
+    }
+  }
+  if (flags.some((flag) => flag !== flags[0])) {
+    throw new Error("Attachment response has conflicting pagination info.");
+  }
+
+  let list;
+  for (const candidate of [payload, response?.details, response]) {
+    if (Array.isArray(candidate)) {
+      list = candidate;
+      break;
+    }
+    if (Array.isArray(candidate?.data)) {
+      list = candidate.data;
+      break;
+    }
+  }
+
+  const noContent =
+    explicitNoContent ||
+    [payload, response?.details, response].some((item) => item?.code === "NO_CONTENT");
+  if (!list && noContent) list = [];
+  if (!list) throw new Error("Attachment response did not contain a verified list.");
+  if (list.length > perPage) throw new Error("Attachment page exceeded the requested size.");
+  const moreRecords = flags[0];
+  if (moreRecords === true && list.length === 0) {
+    throw new Error("Attachment response requested another page without records.");
+  }
+  if (list.length === perPage && moreRecords === undefined) {
+    throw new Error("A full attachment page did not include pagination info.");
+  }
+  return { data: list, moreRecords: moreRecords === true };
+};
+
+export const parseAttachmentListResponse = (response) => {
+  const page = parseAttachmentPageResponse(response);
+  if (page.moreRecords) {
+    throw new Error("Attachment response contains more records than a single page.");
+  }
+  return page.data;
+};
 
 async function uploadAttachment({ module, recordId, data }) {
   try {
@@ -29,40 +120,31 @@ async function uploadAttachment({ module, recordId, data }) {
 
 async function getAttachments({ module, recordId }) {
   try {
-    const url = `${dataCenterMap.AU}/crm/v6/${module}/${recordId}/Attachments?fields=id,File_Name,$file_id`;
-
-    var req_data = {
-      url,
-      param_type: 1,
-      headers: {},
-      method: "GET",
-    };
-
-    const getAttachmentsResp = await ZOHO.CRM.CONNECTION.invoke(
-      conn_name,
-      req_data
-    );
-
-    const sm = getAttachmentsResp?.details?.statusMessage;
-    const details = getAttachmentsResp?.details;
-
-    let list = [];
-    if (sm !== "" && sm !== null && sm !== undefined) {
-      const parsed = typeof sm === "string"
-        ? (() => { try { return JSON.parse(sm); } catch { return {}; } })()
-        : sm;
-      list = Array.isArray(parsed?.data) ? parsed.data : (Array.isArray(parsed) ? parsed : []);
+    const attachments = [];
+    const seenIds = new Set();
+    for (let page = 1; page <= MAX_ATTACHMENT_PAGES; page += 1) {
+      const url = `${dataCenterMap.AU}/crm/v6/${module}/${recordId}/Attachments?fields=id,File_Name,$file_id&page=${page}&per_page=${ATTACHMENT_PAGE_SIZE}`;
+      const response = await ZOHO.CRM.CONNECTION.invoke(conn_name, {
+        url,
+        param_type: 1,
+        headers: {},
+        method: "GET",
+      });
+      const result = parseAttachmentPageResponse(response);
+      for (const attachment of result.data) {
+        if (attachment?.id && seenIds.has(String(attachment.id))) {
+          throw new Error(`Attachment ${attachment.id} appeared on more than one page.`);
+        }
+        if (attachment?.id) seenIds.add(String(attachment.id));
+        attachments.push(attachment);
+      }
+      if (!result.moreRecords) return { data: attachments, error: null };
     }
-    if (list.length === 0 && details && typeof details === "object" && Array.isArray(details?.data)) {
-      list = details.data;
-    }
-
-    return { data: list, error: null };
+    throw new Error(`Attachment list exceeded ${MAX_ATTACHMENT_PAGES} pages.`);
   } catch (getAttachmentsError) {
-    console.log({ getAttachmentsError });
     return {
       data: null,
-      error: "Something went wrong",
+      error: getAttachmentsError?.message || "Something went wrong",
     };
   }
 }
