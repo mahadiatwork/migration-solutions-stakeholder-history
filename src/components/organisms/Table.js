@@ -116,8 +116,8 @@ function EnhancedTableHead({ order, orderBy, handleRequestSort }) {
 
   const headCells = [
     { id: "date_time", numeric: false, label: "Date & Time" },
-    { id: "type", numeric: false, label: "Category" },
-    { id: "result", numeric: false, label: "Activity Type" },
+    { id: "type", numeric: false, label: "Type" },
+    { id: "result", numeric: false, label: "Result" },
     { id: "duration", numeric: false, label: "Duration" },
     {
       id: "regarding",
@@ -297,10 +297,10 @@ export function Table({
                       </Box>
                     </TableCell>
                     <TableCell size="small">
-                      {row.type || "Unknown Category"}
+                      {row.type || "Unknown Type"}
                     </TableCell>
                     <TableCell size="small">
-                      {row.result || "No Activity Type"}
+                      {row.result || "No Result"}
                     </TableCell>
                     <TableCell size="small">{row.duration ?? "N/A"}</TableCell>
                     <TableCell

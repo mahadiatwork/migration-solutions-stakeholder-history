@@ -140,8 +140,11 @@ describe("Widget_Picklist_Config authority", () => {
   test("retains compatibility defaults only for the fallback source", () => {
     const fallback = { _source: "fallback" };
 
-    expect(getTypeOptionsFromConfig(fallback)).toContain("Meeting");
-    expect(getDurationOptionsFromConfig(fallback)).toContain(60);
+    expect(getTypeOptionsFromConfig(fallback)[0]).toBe("Meeting");
+    expect(getTypeOptionsFromConfig(fallback)).not.toContain("Communication & Meetings");
+    expect(getDurationOptionsFromConfig(fallback)).toEqual(
+      Array.from({ length: 24 }, (_, index) => (index + 1) * 10)
+    );
     expect(getResultOptions("Meeting", fallback)).toEqual([
       "Meeting Held",
       "Meeting Not Held",

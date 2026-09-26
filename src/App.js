@@ -627,7 +627,7 @@ const App = () => {
     const active = [];
     if (dateRange?.preDay || dateRange?.startDate || dateRange?.custom)
       active.push("Date");
-    if (selectedType) active.push("Category");
+    if (selectedType) active.push("Type");
     if (selectedOwner) active.push("User");
     if (keyword?.trim()) active.push("Keyword");
     return active;
@@ -783,7 +783,7 @@ const App = () => {
                 renderInput={(params) => (
                   <TextField
                     {...params}
-                    label="Categories"
+                    label="Types"
                     size="small"
                     InputLabelProps={{ style: { fontSize: "9pt" } }}
                   />
@@ -1001,7 +1001,7 @@ const App = () => {
                   },
                 }}
                 renderInput={(params) => (
-                  <TextField {...params} label="Categories" size="small" />
+                  <TextField {...params} label="Types" size="small" />
                 )}
                 onChange={(e, value) => setSelectedType(value)}
               />
@@ -1082,8 +1082,8 @@ const App = () => {
                   <TableHead>
                     <TableRow>
                       <TableCell>Name</TableCell>
-                      <TableCell>Category</TableCell>
-                      <TableCell>Activity Type</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Result</TableCell>
                       <TableCell>Date & Time</TableCell>
                       <TableCell>Owner</TableCell>
                     </TableRow>
@@ -1101,8 +1101,8 @@ const App = () => {
                           }}
                         >
                           <TableCell>{row.name || "Unknown Name"}</TableCell>
-                          <TableCell>{row.type || "Unknown Category"}</TableCell>
-                          <TableCell>{row.result || "No Activity Type"}</TableCell>
+                          <TableCell>{row.type || "Unknown Type"}</TableCell>
+                          <TableCell>{row.result || "No Result"}</TableCell>
                           <TableCell>
                             {row.date_time
                               ? dayjs(row.date_time).format(

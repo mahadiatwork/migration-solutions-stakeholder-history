@@ -5,7 +5,6 @@ import {
   conn_name,
 } from "../config/config";
 import {
-  mandatoryActivityTypes,
   typeOptions as defaultTypeOptions,
   resultMapping as defaultResultMapping,
   durationOptions as defaultDurationOptions,
@@ -434,13 +433,6 @@ export const getDurationOptionsFromConfig = (config) => {
     : defaultDurationOptions;
 };
 
-const mandatoryResultMapping = Object.fromEntries(
-  Object.entries(mandatoryActivityTypes).map(([category, values]) => [
-    category,
-    values[0],
-  ])
-);
-
 export const getResultMappingFromConfig = (config) => {
   if (config?._source === "custom_module") {
     return config.resultMapping || {};
@@ -450,6 +442,5 @@ export const getResultMappingFromConfig = (config) => {
     ...(config?.resultMapping && Object.keys(config.resultMapping).length
       ? config.resultMapping
       : {}),
-    ...mandatoryResultMapping,
   };
 };

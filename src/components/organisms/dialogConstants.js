@@ -3,48 +3,11 @@
  */
 
 export const durationOptions = Array.from(
-  { length: 49 },
-  (_, index) => index * 5
+  { length: 24 },
+  (_, index) => (index + 1) * 10
 );
 
-export const mandatoryActivityTypes = {
-  "Communication & Meetings": ["Call", "Email", "Meeting", "Consultation"],
-  "Assessment & Analysis": [
-    "Assessment",
-    "Research",
-    "Strategy & Problem Solving",
-    "Evidence & Risk Analysis",
-  ],
-  "Technical casework": [
-    "Document Collection/Management",
-    "Document Review",
-    "Drafting/Preparation",
-    "Review/Checking",
-    "Amendments",
-    "Lodgement/Submission",
-    "RFI",
-  ],
-  Administration: [
-    "Matter Administration",
-    "CRM/File Management",
-    "Allocation/Handover",
-    "Billing/Payment",
-    "Closure/Archiving",
-  ],
-  Other: [
-    "Training",
-    "Business Development",
-    "Internal Project/Process Improvement",
-    "Internal Meeting",
-    "General Management",
-    "Other",
-  ],
-};
-
-export const mandatoryCategoryOptions = Object.keys(mandatoryActivityTypes);
-
 export const typeOptions = [
-  ...mandatoryCategoryOptions,
   "Meeting",
   "To-Do",
   "Appointment",
@@ -61,14 +24,10 @@ export const typeOptions = [
   "Room 3",
   "To Do Billing",
   "Vacation",
+  "Other",
 ];
 
 export const resultMapping = {
-  "Communication & Meetings": "Call",
-  "Assessment & Analysis": "Assessment",
-  "Technical casework": "Document Collection/Management",
-  Administration: "Matter Administration",
-  Other: "Training",
   Meeting: "Meeting Held",
   "To-Do": "To-do Done",
   Appointment: "Appointment Completed",
@@ -85,4 +44,5 @@ export const resultMapping = {
   "Room 3": "Room 3 - Completed",
   "To Do Billing": "To Do Billing - Completed",
   Vacation: "Vacation - Completed",
+  Other: "Attachment",
 };
