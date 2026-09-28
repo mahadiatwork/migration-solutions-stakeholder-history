@@ -163,26 +163,11 @@ const App = () => {
     if (!module || !recordId) return;
     const { preserveFieldsForRecordId } = options;
     try {
-      let data = [];
-      try {
-        data = await zohoApi.record.fetchStakeholderHistoryViaCoqlV8(
-          module,
-          recordId,
-          2000,
-          0
-        );
-      } catch (coqlError) {
-        console.warn(
-          "COQL v8 failed, falling back to getRelatedRecords:",
-          coqlError
-        );
-        const resp = await zohoApi.record.getRecordsFromRelatedList({
-          module,
-          recordId,
-          RelatedListAPI: "Stakeholder_History",
-        });
-        data = resp?.data || [];
-      }
+      const data = await zohoApi.record.fetchStakeholderHistory(
+        module,
+        recordId,
+        2000
+      );
 
       const usersResponse = await ZOHO.CRM.API.getAllUsers({
         Type: "AllUsers",
@@ -347,6 +332,8 @@ const App = () => {
         const contactName =
           obj?.["Contact_Details.Full_Name"] ??
           obj?.Contact_Details?.Full_Name ??
+          obj?.["Contact_Details.name"] ??
+          obj?.Contact_Details?.name ??
           name;
         const participants =
           contactId && contactName

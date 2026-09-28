@@ -1,6 +1,52 @@
 import { dataCenterMap, conn_name } from "../config/config";
 
 const ZOHO = window.ZOHO;
+const RELATED_LIST_PAGE_SIZE = 200;
+const MAX_RELATED_LIST_RECORDS = 2000;
+
+const parseCoqlResponse = (response) => {
+  const rawStatusMessage = response?.details?.statusMessage;
+  let statusMessage = rawStatusMessage;
+
+  if (typeof rawStatusMessage === "string" && rawStatusMessage.trim()) {
+    try {
+      statusMessage = JSON.parse(rawStatusMessage);
+    } catch {
+      throw new Error("COQL returned an unreadable response.");
+    }
+  }
+
+  const candidates = [statusMessage, response?.details, response].filter(
+    (candidate) => candidate && typeof candidate === "object"
+  );
+
+  const errorPayload = candidates.find((candidate) => {
+    const code = String(candidate?.code || "").toUpperCase();
+    return (
+      String(candidate?.status || "").toLowerCase() === "error" ||
+      (code && code !== "SUCCESS" && code !== "NO_CONTENT")
+    );
+  });
+
+  if (errorPayload) {
+    throw new Error(
+      `${errorPayload.code || "COQL_ERROR"}: ${
+        errorPayload.message || "Could not load Stakeholder History."
+      }`
+    );
+  }
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate.data)) return candidate.data;
+  }
+
+  const statusCode = Number(
+    response?.details?.statusCode ?? response?.statusCode ?? response?.status
+  );
+  if (statusCode === 204 || response?.statusText === "nocontent") return [];
+
+  throw new Error("COQL returned an unrecognized response.");
+};
 
 const JUNCTION_HISTORY_SELECT = [
   "Name",
@@ -57,30 +103,6 @@ export async function fetchStakeholderHistoryViaCoqlV8(
   limit = 2000,
   offset = 0
 ) {
-  // Helper to normalize COQL responses that may return data either
-  // in response.data or in details.statusMessage (as JSON string/object).
-  const parseCoqlResponse = (response) => {
-    if (!response) return [];
-    if (Array.isArray(response.data)) return response.data;
-    if (response?.details?.statusMessage) {
-      const sm = response.details.statusMessage;
-      const parsed =
-        typeof sm === "string"
-          ? (() => {
-              try {
-                return JSON.parse(sm || "{}");
-              } catch {
-                return {};
-              }
-            })()
-          : sm;
-      if (Array.isArray(parsed?.data)) return parsed.data;
-      if (Array.isArray(parsed)) return parsed;
-    }
-    if (Array.isArray(response?.details?.data)) return response.details.data;
-    return [];
-  };
-
   const baseUrl = `${dataCenterMap.AU}/crm/v8/coql`;
 
   // Contact context: History_X_Contacts via Contact_Details
@@ -169,25 +191,165 @@ export async function getRecordsFromRelatedList({
   module,
   recordId,
   RelatedListAPI,
+  perPage = RELATED_LIST_PAGE_SIZE,
+  maxRecords = MAX_RELATED_LIST_RECORDS,
 }) {
   try {
-    const relatedListResp = await ZOHO.CRM.API.getRelatedRecords({
-      Entity: module,
-      RecordID: recordId,
-      RelatedList: RelatedListAPI,
-    });
+    const records = [];
+    const pageSize = Math.min(Math.max(Number(perPage) || 1, 1), 200);
+    const recordLimit = Math.max(Number(maxRecords) || pageSize, 1);
+    let page = 1;
 
-    if (relatedListResp.statusText === "nocontent") {
-      return { data: [], error: null };
+    while (records.length < recordLimit) {
+      const relatedListResp = await ZOHO.CRM.API.getRelatedRecords({
+        Entity: module,
+        RecordID: recordId,
+        RelatedList: RelatedListAPI,
+        page,
+        per_page: pageSize,
+      });
+
+      if (relatedListResp?.statusText === "nocontent") break;
+      if (!Array.isArray(relatedListResp?.data)) {
+        throw new Error(
+          relatedListResp?.message ||
+            "Zoho returned an invalid related-list response."
+        );
+      }
+
+      const pageRecords = relatedListResp.data;
+      records.push(...pageRecords.slice(0, recordLimit - records.length));
+
+      const moreRecords = relatedListResp?.info?.more_records;
+      if (
+        moreRecords === false ||
+        pageRecords.length === 0 ||
+        (moreRecords !== true && pageRecords.length < pageSize)
+      ) {
+        break;
+      }
+      page += 1;
     }
 
-    if (!(relatedListResp.statusText === "nocontent")) {
-      return { data: relatedListResp?.data, erroe: null };
-    }
+    return { data: records, error: null };
   } catch (getRecordsFromRelatedListError) {
     console.log({ getRecordsFromRelatedListError });
-    return { data: null, error: "Something went wrong" };
+    return {
+      data: null,
+      error:
+        getRecordsFromRelatedListError?.message ||
+        "Could not load records from the related list.",
+    };
   }
+}
+
+const searchActiveRecords = async ({
+  entity,
+  criteria,
+  maxRecords = MAX_RELATED_LIST_RECORDS,
+}) => {
+  try {
+    if (typeof ZOHO.CRM.API.searchRecord !== "function") {
+      throw new Error("The active CRM search API is unavailable.");
+    }
+
+    const records = [];
+    const recordLimit = Math.max(Number(maxRecords) || 1, 1);
+    let page = 1;
+
+    while (records.length < recordLimit) {
+      const response = await ZOHO.CRM.API.searchRecord({
+        Entity: entity,
+        Type: "criteria",
+        Query: criteria,
+        delay: false,
+        page,
+        per_page: RELATED_LIST_PAGE_SIZE,
+      });
+
+      if (String(response?.statusText || "").toLowerCase() === "nocontent") {
+        break;
+      }
+      if (!Array.isArray(response?.data)) {
+        throw new Error(
+          response?.message || `Zoho returned an invalid ${entity} search response.`
+        );
+      }
+
+      records.push(
+        ...response.data.slice(0, recordLimit - records.length)
+      );
+      if (
+        response?.info?.more_records === false ||
+        response.data.length === 0 ||
+        (response?.info?.more_records !== true &&
+          response.data.length < RELATED_LIST_PAGE_SIZE)
+      ) {
+        break;
+      }
+      page += 1;
+    }
+
+    return { data: records, error: null };
+  } catch (error) {
+    return {
+      data: null,
+      error: error?.message || `Could not search ${entity}.`,
+    };
+  }
+};
+
+/**
+ * Load Stakeholder History from the CRM environment containing the open record.
+ * Named OAuth connections can point at production while this widget is open in
+ * a sandbox, so every query here uses the active embedded CRM SDK session.
+ */
+export async function fetchStakeholderHistory(
+  module,
+  recordId,
+  limit = MAX_RELATED_LIST_RECORDS
+) {
+  const relatedListResponse = await getRecordsFromRelatedList({
+    module,
+    recordId,
+    RelatedListAPI: "Stakeholder_History",
+    maxRecords: limit,
+  });
+
+  if (module === "Accounts" || module === "Stakeholders") {
+    const criteria = `(Stakeholder:equals:${recordId})`;
+    const [directHistory, junctionHistory] = await Promise.all([
+      searchActiveRecords({ entity: "History1", criteria, maxRecords: limit }),
+      searchActiveRecords({
+        entity: "History_X_Contacts",
+        criteria,
+        maxRecords: limit,
+      }),
+    ]);
+
+    // Direct History records come first so App.js keeps their complete field
+    // values while merging participants from any following junction rows.
+    if (directHistory.error) {
+      throw new Error(
+        `Could not load Stakeholder History from the active CRM: ${directHistory.error}`
+      );
+    }
+    if (junctionHistory.error && relatedListResponse.error) {
+      throw new Error(
+        `Could not load Stakeholder History participants from the active CRM: ${junctionHistory.error}; ${relatedListResponse.error}`
+      );
+    }
+    return [
+      ...(directHistory.data || []),
+      ...(junctionHistory.data || []),
+      ...(relatedListResponse.data || []),
+    ];
+  }
+
+  if (relatedListResponse.error) {
+    throw new Error(relatedListResponse.error);
+  }
+  return relatedListResponse.data || [];
 }
 
 /**
@@ -226,5 +388,6 @@ export async function changeOwner(module, recordId, ownerId) {
 export const record = {
   getRecordsFromRelatedList,
   fetchStakeholderHistoryViaCoqlV8,
+  fetchStakeholderHistory,
   changeOwner,
 };
