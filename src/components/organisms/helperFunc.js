@@ -52,6 +52,16 @@ export const getResultOptions = (type, picklistConfig) => {
 };
 
 
+export const CUSTOM_REGARDING_LABEL = "Custom";
+export const CUSTOM_REGARDING_OPTION = "__custom_regarding__";
+
+export const filterReservedRegardingOptions = (options = []) =>
+  (Array.isArray(options) ? options : []).filter(
+    (option) =>
+      option !== CUSTOM_REGARDING_LABEL &&
+      option !== CUSTOM_REGARDING_OPTION
+  );
+
 export const getRegardingOptions = (
   type,
   existingValue,
@@ -71,7 +81,7 @@ export const getRegardingOptions = (
     ) {
       values.unshift(safeExistingValue);
     }
-    return values;
+    return filterReservedRegardingOptions(values);
   }
 
   if (configuredRegarding?.length) {
@@ -85,7 +95,7 @@ export const getRegardingOptions = (
     ) {
       values.unshift(safeExistingValue);
     }
-    return values;
+    return filterReservedRegardingOptions(values);
   }
 
   const options = {
@@ -127,7 +137,26 @@ export const getRegardingOptions = (
     predefinedOptions = [safeExistingValue, ...predefinedOptions];
   }
 
-  return predefinedOptions;
+  return filterReservedRegardingOptions(predefinedOptions);
 };
+
+export const DEFAULT_CREATE_HISTORY_TYPE = "Communication & Meetings";
+
+export const resolveCreateHistoryDefaults = (configuredTypeOptions) => {
+  const type = (Array.isArray(configuredTypeOptions)
+    ? configuredTypeOptions
+    : []
+  ).includes(DEFAULT_CREATE_HISTORY_TYPE)
+    ? DEFAULT_CREATE_HISTORY_TYPE
+    : "";
+
+  return { type, result: "", regarding: "" };
+};
+
+export const getPersistedRegardingValue = (
+  selectedValue,
+  customValue = ""
+) =>
+  selectedValue === CUSTOM_REGARDING_OPTION ? customValue : selectedValue;
 
 

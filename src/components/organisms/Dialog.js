@@ -25,7 +25,11 @@ import { DemoContainer } from "@mui/x-date-pickers/internals/demo";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
-import { getRegardingOptions, getResultOptions } from "./helperFunc";
+import {
+  getRegardingOptions,
+  getResultOptions,
+  resolveCreateHistoryDefaults,
+} from "./helperFunc";
 import {
   getDurationOptionsFromConfig,
   getResultMappingFromConfig,
@@ -107,11 +111,12 @@ export function Dialog({
     !configuredTypeOptions.includes(formData.type)
       ? [formData.type, ...configuredTypeOptions]
       : configuredTypeOptions;
-  const defaultType = configuredTypeOptions[0] || "";
-  const defaultResult = getResultOptions(defaultType, picklistConfig)[0] || "";
+  const {
+    type: defaultType,
+    result: defaultResult,
+    regarding: defaultRegarding,
+  } = resolveCreateHistoryDefaults(configuredTypeOptions);
   const defaultDuration = configuredDurationOptions[0] ?? null;
-  const defaultRegarding =
-    getRegardingOptions(defaultType, "", picklistConfig)[0] || "";
   const durationOptions =
     selectedRowData &&
     formData?.duration !== null &&
@@ -766,12 +771,16 @@ export function Dialog({
                     handleInputChange("type", e.target.value);
                     handleInputChange(
                       "result",
-                      getResultOptions(e.target.value, picklistConfig)[0]
+                      getResultOptions(e.target.value, picklistConfig)[0] || ""
                     );
 
                     handleInputChange(
                       "regarding",
-                      getRegardingOptions(e.target.value, "", picklistConfig)[0]
+                      getRegardingOptions(
+                        e.target.value,
+                        "",
+                        picklistConfig
+                      )[0] || ""
                     );
 
                   }}
