@@ -19,6 +19,7 @@ import {
 } from "@mui/material";
 import { zohoApi } from "../../zohoApi";
 import { moveStakeholderHistoryToApplication } from "../../services/stakeholderHistoryMove";
+import { formatCalendarDateForDisplay } from "../../util/dateTime";
 
 
 const ApplicationTable = ({
@@ -72,7 +73,9 @@ const ApplicationTable = ({
               </TableCell>
               <TableCell sx={{ fontSize: "9pt" }}>{app.File_Status ?? "-"}</TableCell>
               <TableCell sx={{ fontSize: "9pt" }}>
-                {app.Deadline ? new Date(app.Deadline).toLocaleDateString() : "N/A"}
+                {app.Deadline
+                  ? formatCalendarDateForDisplay(app.Deadline)
+                  : "N/A"}
               </TableCell>
             </TableRow>
           ))}
