@@ -355,8 +355,17 @@ const pushUnique = (list, value) => {
 };
 
 const sortRank = (value) => {
-  const rank = Number(value);
-  return Number.isFinite(rank) ? rank : 9999;
+  const rawValue = value && typeof value === "object"
+    ? value.actual_value ?? value.display_value ?? value.name ?? value.Name
+    : value;
+  if (
+    (typeof rawValue !== "number" && typeof rawValue !== "string") ||
+    (typeof rawValue === "string" && rawValue.trim() === "")
+  ) {
+    return Infinity;
+  }
+  const rank = Number(rawValue);
+  return Number.isFinite(rank) ? rank : Infinity;
 };
 
 const normalizedCategory = (value) => {
@@ -397,7 +406,9 @@ export const groupRecords = (records) => {
     }
     if (recordCategory === "duration") {
       const duration = Number.parseInt(value, 10);
-      if (Number.isFinite(duration)) pushUnique(durations, duration);
+      if (Number.isFinite(duration) && !durations.includes(duration)) {
+        durations.push(duration);
+      }
     }
   }
 

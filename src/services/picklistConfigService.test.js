@@ -15,6 +15,41 @@ describe("Widget_Picklist_Config authority", () => {
     delete window.ZOHO;
   });
 
+  test("orders every category by numeric priority, preserving zero and placing missing ranks last", () => {
+    const rankedOptions = [
+      ["Unranked", null],
+      ["Meeting", "10"],
+      ["Fruit", "9"],
+      ["Other", 5],
+      ["First", 0],
+      ["Wrapped", { actual_value: "2", display_value: "second" }],
+      ["High", 12000],
+      ["Blank", " "],
+      ["Invalid", "not a number"],
+      ["Infinite", Infinity],
+      ["Boolean", true],
+      ["Array", []],
+      ["Same priority", 9],
+    ];
+    const records = ["Type", "Result", "Regarding"].flatMap((Category) =>
+      rankedOptions.map(([Name, Sort_Order]) => ({
+        Name, Category, Sort_Order, Parent_Type: "Fruit",
+      }))
+    );
+    records.push(...[["60", 0], ["0", 9], ["15", 5]].map(([Name, Sort_Order]) => ({
+      Name, Category: "Duration", Sort_Order,
+    })));
+
+    const config = groupRecords(records);
+
+    const expected = ["First", "Wrapped", "Other", "Fruit", "Same priority", "Meeting", "High", "Unranked", "Blank", "Invalid", "Infinite", "Boolean", "Array"];
+    expect(getTypeOptionsFromConfig(config)).toEqual(expected);
+    expect(config.results.Fruit).toEqual(expected);
+    expect(config.regarding.Fruit).toEqual(expected);
+    expect(getDurationOptionsFromConfig(config)).toEqual([60, 15, 0]);
+    expect(config.resultMapping.Fruit).toBe("First");
+  });
+
   test("uses an empty custom config after a successful read with no active rows", () => {
     expect(
       buildConfigFromReadResult({
