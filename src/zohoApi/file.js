@@ -10,13 +10,16 @@ const ZOHO = window.ZOHO;
 const ATTACHMENT_PAGE_SIZE = 200;
 const MAX_ATTACHMENT_PAGES = 50;
 
+const normalizedStatusText = (value) =>
+  String(value || "").replace(/[\s_-]/g, "").toLowerCase();
+
 export const parseAttachmentPageResponse = (response, perPage = ATTACHMENT_PAGE_SIZE) => {
   const raw = response?.details?.statusMessage;
   const explicitNoContent =
     Number(response?.statusCode) === 204 ||
     Number(response?.details?.statusCode) === 204 ||
-    String(response?.statusText || "").toLowerCase() === "nocontent" ||
-    String(response?.details?.statusText || "").toLowerCase() === "nocontent";
+    normalizedStatusText(response?.statusText) === "nocontent" ||
+    normalizedStatusText(response?.details?.statusText) === "nocontent";
   let payload = raw;
   if (typeof raw === "string" && raw.trim()) {
     try {
@@ -30,15 +33,22 @@ export const parseAttachmentPageResponse = (response, perPage = ATTACHMENT_PAGE_
     }
   }
 
-  const error = [payload, response?.details, response].find((item) =>
+  const containers = [payload, response?.details, response].filter(
+    (item) => item && typeof item === "object"
+  );
+  const candidates = [
+    ...containers,
+    ...containers.flatMap((item) => Array.isArray(item?.data) ? item.data : []),
+  ];
+  const error = candidates.find((item) =>
     item && typeof item === "object" &&
     (String(item.status || "").toLowerCase() === "error" ||
       (item.code != null &&
-        !["SUCCESS", "200", "NO_CONTENT"].includes(String(item.code).toUpperCase())))
+        !["SUCCESS", "200", "204", "NO_CONTENT"].includes(String(item.code).toUpperCase())))
   );
   if (error) throw new Error(error.message || "Attachment request failed.");
 
-  const httpFailure = [payload, response?.details, response].find((item) =>
+  const httpFailure = candidates.find((item) =>
     item && typeof item === "object" && Number(item.statusCode) >= 400
   );
   if (httpFailure) {
@@ -53,10 +63,17 @@ export const parseAttachmentPageResponse = (response, perPage = ATTACHMENT_PAGE_
       throw new Error("Attachment response has invalid pagination info.");
     }
     if (Object.prototype.hasOwnProperty.call(info, "more_records")) {
-      if (typeof info.more_records !== "boolean") {
+      let moreRecords = info.more_records;
+      if (typeof moreRecords === "string") {
+        const normalized = moreRecords.trim().toLowerCase();
+        if (normalized === "true" || normalized === "false") {
+          moreRecords = normalized === "true";
+        }
+      }
+      if (typeof moreRecords !== "boolean") {
         throw new Error("Attachment response has invalid pagination info.");
       }
-      flags.push(info.more_records);
+      flags.push(moreRecords);
     }
   }
   if (flags.some((flag) => flag !== flags[0])) {
@@ -77,7 +94,10 @@ export const parseAttachmentPageResponse = (response, perPage = ATTACHMENT_PAGE_
 
   const noContent =
     explicitNoContent ||
-    [payload, response?.details, response].some((item) => item?.code === "NO_CONTENT");
+    candidates.some((item) =>
+      String(item?.code || "").toUpperCase() === "NO_CONTENT" ||
+      normalizedStatusText(item?.statusText) === "nocontent"
+    );
   if (!list && noContent) list = [];
   if (!list) throw new Error("Attachment response did not contain a verified list.");
   if (list.length > perPage) throw new Error("Attachment page exceeded the requested size.");
@@ -118,18 +138,33 @@ async function uploadAttachment({ module, recordId, data }) {
   }
 }
 
-async function getAttachments({ module, recordId }) {
+async function getAttachments({ module, recordId, strict = false }) {
   try {
+    const crm = (window.ZOHO || ZOHO)?.CRM;
+    if (strict && typeof crm?.API?.getRelatedRecords !== "function") {
+      return {
+        data: null,
+        error: "The active CRM attachment API is unavailable.",
+      };
+    }
+
     const attachments = [];
     const seenIds = new Set();
     for (let page = 1; page <= MAX_ATTACHMENT_PAGES; page += 1) {
-      const url = `${dataCenterMap.AU}/crm/v6/${module}/${recordId}/Attachments?fields=id,File_Name,$file_id&page=${page}&per_page=${ATTACHMENT_PAGE_SIZE}`;
-      const response = await ZOHO.CRM.CONNECTION.invoke(conn_name, {
-        url,
-        param_type: 1,
-        headers: {},
-        method: "GET",
-      });
+      const response = strict
+        ? await crm.API.getRelatedRecords({
+          Entity: module,
+          RecordID: recordId,
+          RelatedList: "Attachments",
+          page,
+          per_page: ATTACHMENT_PAGE_SIZE,
+        })
+        : await crm.CONNECTION.invoke(conn_name, {
+          url: `${dataCenterMap.AU}/crm/v6/${module}/${recordId}/Attachments?fields=id,File_Name,$file_id&page=${page}&per_page=${ATTACHMENT_PAGE_SIZE}`,
+          param_type: 1,
+          headers: {},
+          method: "GET",
+        });
       const result = parseAttachmentPageResponse(response);
       for (const attachment of result.data) {
         if (attachment?.id && seenIds.has(String(attachment.id))) {

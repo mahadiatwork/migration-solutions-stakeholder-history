@@ -101,7 +101,11 @@ async function getRelated(zoho, module, recordId, relatedList) {
 }
 
 async function getAttachments(fileApi, module, recordId) {
-  const response = await fileApi.getAttachments({ module, recordId });
+  const response = await fileApi.getAttachments({
+    module,
+    recordId,
+    strict: true,
+  });
   if (response?.error || !Array.isArray(response?.data)) {
     throw new Error(`Could not read attachments for ${module} ${recordId}: ${response?.error || "invalid response"}`);
   }

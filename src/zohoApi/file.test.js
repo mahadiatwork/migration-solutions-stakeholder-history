@@ -9,9 +9,9 @@ const pageResponse = (data, moreRecords) => ({
   },
 });
 
-const loadFileApi = (invoke) => {
+const loadFileApi = (invoke, api) => {
   jest.resetModules();
-  window.ZOHO = { CRM: { CONNECTION: { invoke } } };
+  window.ZOHO = { CRM: { API: api, CONNECTION: { invoke } } };
   return require("./file").file;
 };
 
@@ -29,6 +29,7 @@ test("reads attachment rows from Zoho's JSON statusMessage", () => {
 test("accepts an explicit empty attachment list or no-content status", () => {
   expect(parseAttachmentListResponse({ details: { statusMessage: { data: [] } } })).toEqual([]);
   expect(parseAttachmentListResponse({ code: "SUCCESS", statusCode: 204 })).toEqual([]);
+  expect(parseAttachmentListResponse({ statusText: "No Content" })).toEqual([]);
   expect(parseAttachmentListResponse({
     details: { statusCode: "204", statusMessage: "No Content" },
   })).toEqual([]);
@@ -56,6 +57,9 @@ test("rejects errors inside a successful Connection.invoke envelope", () => {
   expect(() => parseAttachmentListResponse({ code: "NO_PERMISSION", message: "Denied" }))
     .toThrow("Denied");
   expect(() => parseAttachmentListResponse({
+    data: [{ code: "AUTHORIZATION_FAILED", message: "Record is unavailable" }],
+  })).toThrow("Record is unavailable");
+  expect(() => parseAttachmentListResponse({
     code: "SUCCESS",
     details: { statusCode: 403, statusMessage: { data: [] } },
   })).toThrow("HTTP 403");
@@ -64,6 +68,60 @@ test("rejects errors inside a successful Connection.invoke envelope", () => {
     statusCode: 401,
     details: { statusMessage: { data: [] } },
   })).toThrow("HTTP 401");
+});
+
+test("strict move reads use the active CRM environment", async () => {
+  const invoke = jest.fn();
+  const getRelatedRecords = jest.fn().mockResolvedValue({
+    data: [{ id: "file-1", File_Name: "note.pdf" }],
+    info: { more_records: false },
+  });
+  const fileApi = loadFileApi(invoke, { getRelatedRecords });
+
+  await expect(fileApi.getAttachments({
+    module: "History1",
+    recordId: "history-1",
+    strict: true,
+  })).resolves.toEqual({
+    data: [{ id: "file-1", File_Name: "note.pdf" }],
+    error: null,
+  });
+  expect(getRelatedRecords).toHaveBeenCalledWith({
+    Entity: "History1",
+    RecordID: "history-1",
+    RelatedList: "Attachments",
+    page: 1,
+    per_page: 200,
+  });
+  expect(invoke).not.toHaveBeenCalled();
+});
+
+test("strict move reads accept active CRM no-content responses", async () => {
+  const invoke = jest.fn();
+  const getRelatedRecords = jest.fn().mockResolvedValue({ statusText: "No Content" });
+  const fileApi = loadFileApi(invoke, { getRelatedRecords });
+
+  await expect(fileApi.getAttachments({
+    module: "History1",
+    recordId: "history-1",
+    strict: true,
+  })).resolves.toEqual({ data: [], error: null });
+  expect(invoke).not.toHaveBeenCalled();
+});
+
+test("strict move reads fail closed when the active CRM API is unavailable", async () => {
+  const invoke = jest.fn();
+  const fileApi = loadFileApi(invoke);
+
+  await expect(fileApi.getAttachments({
+    module: "History1",
+    recordId: "history-1",
+    strict: true,
+  })).resolves.toEqual({
+    data: null,
+    error: "The active CRM attachment API is unavailable.",
+  });
+  expect(invoke).not.toHaveBeenCalled();
 });
 
 test("reads every attachment page before returning a verified list", async () => {

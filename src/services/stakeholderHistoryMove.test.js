@@ -191,6 +191,9 @@ test("moves a Stakeholder history with its live fields, owner, Contacts, and att
   expect(fixture.changeOwner).toHaveBeenCalledWith("Applications_History", "target-1", "owner-1");
   expect(fixture.zoho.CRM.FUNCTIONS.execute).toHaveBeenCalledTimes(1);
   expect(fixture.zoho.CRM.META.getFields).toHaveBeenCalledWith({ Entity: "Applications_History" });
+  expect(fixture.fileApi.getAttachments.mock.calls.every(([request]) =>
+    request.strict === true
+  )).toBe(true);
 });
 
 test("uses Billable for a legacy source without Billing Type", async () => {
