@@ -4,7 +4,7 @@ const ZOHO = window.ZOHO;
 
 export const MATTER_MODULE = "Applications";
 export const STAKEHOLDER_MODULE = "Accounts";
-export const STAKEHOLDER_MATTERS_RELATED_LIST = "Applications";
+export const STAKEHOLDER_MATTERS_RELATED_LIST = "Applications1";
 
 export const MATTER_SOURCE_FIELDS = {
   id: "id",
@@ -139,17 +139,49 @@ export const fetchLatestMatterForStakeholder = async (
     MATTER_SOURCE_FIELDS.createdTime,
   ].join(",");
 
-  const response = await api.getRelatedRecords({
-    Entity: STAKEHOLDER_MODULE,
-    RecordID: stakeholderId,
-    RelatedList: STAKEHOLDER_MATTERS_RELATED_LIST,
-    page: 1,
-    per_page: 200,
-    fields,
-  });
-
-  const relatedMatter = selectMostRecentlyModifiedMatter(response?.data || []);
+  const matters = await fetchStakeholderMatters(stakeholderId, api, { fields });
+  const relatedMatter = selectMostRecentlyModifiedMatter(matters);
   return hydrateMatterRecord(relatedMatter, api);
+};
+
+export const fetchStakeholderMatters = async (
+  stakeholderId,
+  api = ZOHO?.CRM?.API,
+  { fields } = {}
+) => {
+  if (!stakeholderId) return [];
+
+  const matters = [];
+  const seenIds = new Set();
+  const pageSize = 200;
+
+  for (let page = 1; page <= 100; page += 1) {
+    const request = {
+      Entity: STAKEHOLDER_MODULE,
+      RecordID: stakeholderId,
+      RelatedList: STAKEHOLDER_MATTERS_RELATED_LIST,
+      page,
+      per_page: pageSize,
+    };
+    if (fields) request.fields = fields;
+
+    const response = await api.getRelatedRecords(request);
+    if (String(response?.statusText || "").toLowerCase() === "nocontent") {
+      break;
+    }
+
+    const pageMatters = asArray(response?.data);
+    pageMatters.forEach((matter) => {
+      const id = matter?.id;
+      if (!id || seenIds.has(String(id))) return;
+      seenIds.add(String(id));
+      matters.push(matter);
+    });
+
+    if (response?.info?.more_records !== true) break;
+  }
+
+  return matters;
 };
 
 export const hydrateMatterRecord = async (

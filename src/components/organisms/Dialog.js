@@ -48,6 +48,7 @@ import { zohoApi } from "../../zohoApi";
 import ApplicationDialog from "./ApplicationTable";
 import Stakeholder from "../atoms/Stakeholder";
 import { Close } from "@mui/icons-material";
+import MoveToMatterButton from "./MoveToMatterButton";
 import {
   durationOptions as fallbackDurationOptions,
   resultMapping as fallbackResultMapping,
@@ -143,7 +144,6 @@ export function Dialog({
       ? [formData.result, ...configuredResultOptions]
       : configuredResultOptions;
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [openMoveConfirmation, setOpenMoveConfirmation] = React.useState(false);
   // console.log({ formData });
   const [snackbar, setSnackbar] = React.useState({
     open: false,
@@ -253,7 +253,6 @@ export function Dialog({
     } else {
       // Reset formData to avoid stale data
       setFormData({});
-      setOpenMoveConfirmation(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- form init; ownerList, setSelectedContacts, ZOHO are stable
   }, [openDialog, selectedRowData, loggedInUser, currentContact, currentModuleData, picklistConfig]);
@@ -1182,35 +1181,11 @@ export function Dialog({
               >
                 Delete
               </Button>
-              <Button
-                onClick={() => setOpenMoveConfirmation(true)}
-                variant="outlined"
-                color="success"
-                disabled={isSubmitting || isApplicationsLoading}
-                sx={{
-                  fontSize: "9pt",
-                  marginLeft: "8px",
-                  textTransform: "none",
-                  padding: "4px 8px",
-                }}
-              >
-                {isApplicationsLoading && <CircularProgress size={14} sx={{ mr: 0.5 }} />}
-                {isApplicationsLoading ? "Loading..." : "Move to Application"}
-              </Button>
-              {/*               
-              <Button
+              <MoveToMatterButton
                 onClick={handleMoveToApplication}
-                variant="outlined"
-                color="success"
-                sx={{
-                  fontSize: "9pt",
-                  marginLeft: "8px",
-                  textTransform: "none",
-                  padding: "4px 8px",
-                }}
-              >
-                Move to Application
-              </Button> */}
+                disabled={isSubmitting}
+                isLoading={isApplicationsLoading}
+              />
             </div>
           ) : (
             <div></div>
@@ -1235,36 +1210,6 @@ export function Dialog({
               {isSubmitting ? "Saving..." : buttonText}
             </Button>
           </Box>
-        </DialogActions>
-      </MUIDialog>
-      <MUIDialog
-        open={openMoveConfirmation}
-        onClose={() => setOpenMoveConfirmation(false)}
-        aria-labelledby="move-saved-history-title"
-      >
-        <DialogContent>
-          <Typography id="move-saved-history-title" variant="h6" gutterBottom>
-            Move the saved history?
-          </Typography>
-          <Typography variant="body2">
-            The move uses the version saved in Zoho. Changes made in this form will not be
-            included. To keep those changes, close this message, select Update, then reopen
-            the history and move it.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenMoveConfirmation(false)}>
-            Keep editing
-          </Button>
-          <Button
-            onClick={() => {
-              setOpenMoveConfirmation(false);
-              handleMoveToApplication();
-            }}
-            variant="contained"
-          >
-            Continue with saved version
-          </Button>
         </DialogActions>
       </MUIDialog>
       <ApplicationDialog

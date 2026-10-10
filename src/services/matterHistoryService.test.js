@@ -4,6 +4,7 @@ import {
   extractMatterDependencyMap,
   extractMatterMetadataFromLayout,
   fetchLatestMatterForStakeholder,
+  fetchStakeholderMatters,
   getAllowedMatterProgressOptions,
   hydrateMatterRecord,
   resolveMatterProgressForStage,
@@ -95,7 +96,7 @@ describe("matterHistoryService", () => {
     expect(api.getRelatedRecords).toHaveBeenCalledWith({
       Entity: "Accounts",
       RecordID: "stakeholder-1",
-      RelatedList: "Applications",
+      RelatedList: "Applications1",
       page: 1,
       per_page: 200,
       fields:
@@ -105,6 +106,45 @@ describe("matterHistoryService", () => {
       Entity: "Applications",
       RecordID: "matter-new",
       approved: "both",
+    });
+  });
+
+  test("loads every Matter from the Stakeholder related list", async () => {
+    const api = {
+      getRelatedRecords: jest
+        .fn()
+        .mockResolvedValueOnce({
+          data: [{ id: "matter-1", Name: "M1" }],
+          info: { more_records: true },
+        })
+        .mockResolvedValueOnce({
+          data: [
+            { id: "matter-1", Name: "M1" },
+            { id: "matter-2", Name: "M2" },
+          ],
+          info: { more_records: false },
+        }),
+    };
+
+    await expect(
+      fetchStakeholderMatters("stakeholder-1", api)
+    ).resolves.toEqual([
+      { id: "matter-1", Name: "M1" },
+      { id: "matter-2", Name: "M2" },
+    ]);
+    expect(api.getRelatedRecords).toHaveBeenNthCalledWith(1, {
+      Entity: "Accounts",
+      RecordID: "stakeholder-1",
+      RelatedList: "Applications1",
+      page: 1,
+      per_page: 200,
+    });
+    expect(api.getRelatedRecords).toHaveBeenNthCalledWith(2, {
+      Entity: "Accounts",
+      RecordID: "stakeholder-1",
+      RelatedList: "Applications1",
+      page: 2,
+      per_page: 200,
     });
   });
 

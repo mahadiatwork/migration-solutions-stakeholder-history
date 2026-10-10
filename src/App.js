@@ -40,6 +40,7 @@ import {
   formatDateTimeForDisplay,
   parseCrmDateTime,
 } from "./util/dateTime";
+import { fetchStakeholderMatters } from "./services/matterHistoryService";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -643,40 +644,10 @@ const App = () => {
     setIsApplicationsLoading(true);
     setApplications([]);
     try {
-      let response = null;
-      const recordIdToUse = currentModuleData?.id ?? recordId;
-      try {
-        response = await ZOHO.CRM.API.getRelatedRecords({
-          Entity: module,
-          RecordID: recordIdToUse,
-          RelatedList: "Applications",
-          page: 1,
-          per_page: 200,
-        });
-      } catch (moduleErr) {
-        console.warn("Applications not on current module, trying Account fallback:", moduleErr);
-      }
-      if ((!response?.data || response.data.length === 0) && currentModuleData) {
-        try {
-          const accountId =
-            currentModuleData?.Account_Name?.id ??
-            currentModuleData?.Account?.id ??
-            currentModuleData?.account?.id;
-          if (accountId) {
-            response = await ZOHO.CRM.API.getRelatedRecords({
-              Entity: "Accounts",
-              RecordID: accountId,
-              RelatedList: "Applications",
-              page: 1,
-              per_page: 200,
-            });
-          }
-        } catch (accountErr) {
-          console.warn("Account applications fallback failed:", accountErr);
-        }
-      }
-      const list = response?.data && Array.isArray(response.data) ? response.data : [];
-      setApplications(list);
+      const stakeholderId = currentModuleData?.id ?? recordId;
+      setApplications(
+        await fetchStakeholderMatters(stakeholderId, ZOHO.CRM.API)
+      );
     } catch (error) {
       console.warn("Error fetching related applications:", error);
       setApplications([]);

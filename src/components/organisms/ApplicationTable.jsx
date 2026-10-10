@@ -190,10 +190,10 @@ const ApplicationDialog = ({
           ) : (applications ?? []).length === 0 ? (
             <Box sx={{ py: 3, textAlign: "center", px: 2 }}>
               <Typography variant="body2" color="text.secondary">
-                There&apos;s no application tied to this stakeholder.
+                There&apos;s no matter tied to this stakeholder.
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Add applications to this stakeholder in Zoho CRM to move history here.
+                Add a matter to this stakeholder in Zoho CRM to move history here.
               </Typography>
             </Box>
           ) : (
