@@ -25,12 +25,18 @@ function makeApi({
   attachmentListingLag = 0,
   contactListingLag = 0,
   sourceBillingType = "Non-Billable",
+  sourceDetails = "Case update",
+  targetDetails,
 } = {}) {
   const state = { fail };
   let remainingAttachmentLag = attachmentListingLag;
   let remainingContactLag = contactListingLag;
   const records = {
-    "history-1": { ...source, Billing_Type: sourceBillingType },
+    "history-1": {
+      ...source,
+      Billing_Type: sourceBillingType,
+      History_Details_Plain: sourceDetails,
+    },
     "matter-1": {
       id: "matter-1",
       Name: "MAT-1",
@@ -72,6 +78,9 @@ function makeApi({
           id: "target-1",
           ...APIData,
           Owner: { id: "default-owner" },
+          ...(targetDetails === undefined
+            ? {}
+            : { History_Details: targetDetails }),
           ...(state.fail === "matterSnapshot" ? { Matter_No: "Wrong Matter" } : {}),
         };
         return success("target-1");
@@ -200,6 +209,18 @@ test("uses Billable for a legacy source without Billing Type", async () => {
   const fixture = makeApi({ sourceBillingType: null, contacts: [], attachments: [] });
   await expect(fixture.move()).resolves.toHaveProperty("targetId", "target-1");
   expect(fixture.records["target-1"].Billing_Type).toBe("Billable");
+});
+
+test("accepts Zoho newline normalization in destination history details", async () => {
+  const fixture = makeApi({
+    contacts: [],
+    attachments: [],
+    sourceDetails: "First line\r\nSecond line",
+    targetDetails: "First line\nSecond line",
+  });
+
+  await expect(fixture.move()).resolves.toHaveProperty("targetId", "target-1");
+  expect(fixture.records["history-1"]).toBeUndefined();
 });
 
 test("waits for delayed attachment listing before deleting the source", async () => {

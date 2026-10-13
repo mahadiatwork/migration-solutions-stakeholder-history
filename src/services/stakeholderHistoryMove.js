@@ -13,6 +13,9 @@ const normalizeProgress = (value) => {
   return String(first).trim();
 };
 
+const normalizeZohoText = (value) =>
+  String(value ?? "").replace(/\r\n?/g, "\n");
+
 async function progressFieldType(zoho, matter) {
   const fallback = Array.isArray(matter.Matter_Progress) ? "multiselectpicklist" : "picklist";
   if (typeof zoho.CRM.META?.getFields !== "function") return fallback;
@@ -145,6 +148,9 @@ function assertCopied(response) {
 
 function sameValue(source, target, field) {
   if (source == null || source === "") return target == null || target === "";
+  if (field === "History_Details_Plain") {
+    return normalizeZohoText(source) === normalizeZohoText(target);
+  }
   if (field === "Matter_Progress" || field === "Current_Stage") {
     return normalizeProgress(source) === normalizeProgress(target);
   }
