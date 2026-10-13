@@ -1,8 +1,55 @@
+import { conn_name, dataCenterMap } from "../config/config";
+
 const SOURCE_MODULE = "History1";
 const TARGET_MODULE = "Applications_History";
 const SOURCE_CONTACTS = "Contacts3";
 const TARGET_CONTACTS = "Contacts4";
 const COPY_ATTACHMENTS = "copy_attachment_form_contact_history_to_applicatio";
+
+function assertProductionCrmContext() {
+  const ancestors = typeof window !== "undefined"
+    ? window.location?.ancestorOrigins
+    : null;
+  const referrer = typeof document !== "undefined" ? document.referrer : "";
+  const parentUrl = ancestors?.length
+    ? ancestors[ancestors.length - 1]
+    : referrer;
+  let host;
+  try {
+    host = new URL(parentUrl).hostname.toLowerCase();
+  } catch {
+    throw new Error("Could not confirm the active Zoho CRM environment; the move was cancelled.");
+  }
+  if (host.includes("sandbox")) {
+    throw new Error("Moving history from a Zoho CRM Sandbox is disabled for this production connection.");
+  }
+}
+
+function unwrapConnectionResponse(response) {
+  const statusMessage = response?.details?.statusMessage;
+  if (typeof statusMessage === "string") {
+    try { return JSON.parse(statusMessage); } catch { /* Use the remaining response shape. */ }
+  }
+  if (statusMessage && typeof statusMessage === "object") return statusMessage;
+  return response?.details?.data ? response.details : response;
+}
+
+async function createApplicationHistory(zoho, payload) {
+  assertProductionCrmContext();
+  const response = await zoho.CRM.CONNECTION.invoke(conn_name, {
+    url: `${dataCenterMap.AU}/crm/v8/${TARGET_MODULE}`,
+    method: "POST",
+    param_type: 2,
+    headers: { "Content-Type": "application/json" },
+    parameters: { data: [payload], trigger: ["workflow"] },
+  });
+  const statusCode = Number(response?.details?.statusCode ?? response?.statusCode ?? 0);
+  const body = unwrapConnectionResponse(response);
+  if (statusCode >= 400) {
+    throw new Error(body?.data?.[0]?.message || body?.message || `Zoho CRM request failed (${statusCode}).`);
+  }
+  return body;
+}
 
 const normalizeProgress = (value) => {
   const first = Array.isArray(value) ? value[0] : value;
@@ -249,6 +296,7 @@ export async function moveStakeholderHistoryToApplication({
   let createdThisCall = false;
   let sourceDeletionStarted = false;
   try {
+    assertProductionCrmContext();
     const source = await getRecord(zoho, SOURCE_MODULE, sourceId);
     const matter = await getRecord(zoho, "Applications", applicationId);
     const snapshot = await matterSnapshot(zoho, matter);
@@ -273,11 +321,7 @@ export async function moveStakeholderHistoryToApplication({
     };
 
     if (!targetId) {
-      const created = await zoho.CRM.API.insertRecord({
-        Entity: TARGET_MODULE,
-        APIData: payload,
-        Trigger: ["workflow"],
-      });
+      const created = await createApplicationHistory(zoho, payload);
       targetId = actionId(created, "Create Application History");
       createdThisCall = true;
     } else {

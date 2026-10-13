@@ -18,6 +18,10 @@ function success(id) {
   return { data: [{ code: "SUCCESS", details: { id } }] };
 }
 
+const connectionSuccess = (body) => ({
+  details: { statusMessage: JSON.stringify(body) },
+});
+
 function makeApi({
   contacts = ["contact-1", "contact-2"],
   attachments = ["meeting.pdf", "notes.txt"],
@@ -73,18 +77,6 @@ function makeApi({
       throw new Error(`Unexpected related list ${Entity}/${RelatedList}`);
     }),
     insertRecord: jest.fn(async ({ Entity, APIData }) => {
-      if (Entity === "Applications_History") {
-        records["target-1"] = {
-          id: "target-1",
-          ...APIData,
-          Owner: { id: "default-owner" },
-          ...(targetDetails === undefined
-            ? {}
-            : { History_Details: targetDetails }),
-          ...(state.fail === "matterSnapshot" ? { Matter_No: "Wrong Matter" } : {}),
-        };
-        return success("target-1");
-      }
       if (Entity === "Application_Hstory") {
         if (["targetJunction", "targetJunctionAndRollback"].includes(state.fail)) {
           return { data: [{ code: "INVALID_DATA", message: "invalid Contact" }] };
@@ -133,9 +125,24 @@ function makeApi({
       throw new Error(`Unexpected delete ${Entity}`);
     }),
   };
+  const invoke = jest.fn(async (_connection, request) => {
+    if (request.method === "POST" && request.url.endsWith("/Applications_History")) {
+      const [payload] = request.parameters.data;
+      records["target-1"] = {
+        id: "target-1",
+        ...payload,
+        Owner: { id: "default-owner" },
+        ...(targetDetails === undefined ? {} : { History_Details: targetDetails }),
+        ...(state.fail === "matterSnapshot" ? { Matter_No: "Wrong Matter" } : {}),
+      };
+      return connectionSuccess(success("target-1"));
+    }
+    return connectionSuccess(success("connection-record"));
+  });
   const zoho = {
     CRM: {
       API: api,
+      CONNECTION: { invoke },
       META: {
         getFields: jest.fn(async () => ({
           fields: [{ api_name: "Matter_Progress", data_type: "multiselectpicklist" }],
@@ -181,6 +188,13 @@ function makeApi({
   };
 }
 
+beforeEach(() => {
+  Object.defineProperty(document, "referrer", {
+    configurable: true,
+    value: "https://crm.zoho.com.au/",
+  });
+});
+
 test("moves a Stakeholder history with its live fields, owner, Contacts, and attachments", async () => {
   const fixture = makeApi();
   await expect(fixture.move()).resolves.toEqual({ sourceId: "history-1", targetId: "target-1" });
@@ -200,6 +214,17 @@ test("moves a Stakeholder history with its live fields, owner, Contacts, and att
   expect(fixture.changeOwner).toHaveBeenCalledWith("Applications_History", "target-1", "owner-1");
   expect(fixture.zoho.CRM.FUNCTIONS.execute).toHaveBeenCalledTimes(1);
   expect(fixture.zoho.CRM.META.getFields).toHaveBeenCalledWith({ Entity: "Applications_History" });
+  expect(fixture.zoho.CRM.CONNECTION.invoke).toHaveBeenCalledWith(
+    "zoho_crm_conn",
+    expect.objectContaining({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      parameters: {
+        data: [expect.objectContaining({ History_Details: "Case update" })],
+        trigger: ["workflow"],
+      },
+    })
+  );
   expect(fixture.fileApi.getAttachments.mock.calls.every(([request]) =>
     request.strict === true
   )).toBe(true);
@@ -233,6 +258,29 @@ test("accepts harmless imported-email whitespace normalization", async () => {
 
   await expect(fixture.move()).resolves.toHaveProperty("targetId", "target-1");
   expect(fixture.records["history-1"]).toBeUndefined();
+});
+
+test("preserves imported SharePoint URL encoding in the JSON destination request", async () => {
+  const sharePointUrl = "https://example.sharepoint.com/sites/archive/Shared%20Documents/Email%20Attachment.msg";
+  const fixture = makeApi({ sourceDetails: sharePointUrl, contacts: [], attachments: [] });
+
+  await fixture.move();
+
+  const [, request] = fixture.zoho.CRM.CONNECTION.invoke.mock.calls[0];
+  expect(request.parameters.data[0].History_Details).toBe(sharePointUrl);
+  expect(request.headers["Content-Type"]).toBe("application/json");
+});
+
+test("does not use the production connection from a Zoho CRM Sandbox", async () => {
+  Object.defineProperty(document, "referrer", {
+    configurable: true,
+    value: "https://crmsandbox.zoho.com/",
+  });
+  const fixture = makeApi({ contacts: [], attachments: [] });
+
+  await expect(fixture.move()).rejects.toThrow("Sandbox");
+  expect(fixture.zoho.CRM.CONNECTION.invoke).not.toHaveBeenCalled();
+  expect(fixture.api.deleteRecord).not.toHaveBeenCalled();
 });
 
 test("waits for delayed attachment listing before deleting the source", async () => {
@@ -288,10 +336,14 @@ test("reuses a partial target on retry when rollback itself fails", async () => 
   await expect(fixture.move()).rejects.toMatchObject({ targetId: "target-1" });
   expect(fixture.records["history-1"]).toBeDefined();
   // A retry must use the saved target ID; this test checks the absence of another target insert.
-  const targetCreatesBefore = fixture.api.insertRecord.mock.calls.filter(([request]) => request.Entity === "Applications_History").length;
+  const targetCreatesBefore = fixture.zoho.CRM.CONNECTION.invoke.mock.calls.filter(
+    ([, request]) => request.method === "POST" && request.url.endsWith("/Applications_History")
+  ).length;
   fixture.setFailure(null);
   await expect(fixture.move({ resumeTargetId: "target-1" })).resolves.toHaveProperty("targetId", "target-1");
-  expect(fixture.api.insertRecord.mock.calls.filter(([request]) => request.Entity === "Applications_History")).toHaveLength(targetCreatesBefore);
+  expect(fixture.zoho.CRM.CONNECTION.invoke.mock.calls.filter(
+    ([, request]) => request.method === "POST" && request.url.endsWith("/Applications_History")
+  )).toHaveLength(targetCreatesBefore);
 });
 
 test("retains the source when the attachment function reports failure", async () => {
