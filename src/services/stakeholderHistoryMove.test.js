@@ -137,6 +137,10 @@ function makeApi({
       };
       return connectionSuccess(success("target-1"));
     }
+    if (request.method === "GET" && request.url.includes("/Applications_History/target-1?")) {
+      const target = records["target-1"];
+      return connectionSuccess({ data: target ? [{ ...target }] : [] });
+    }
     return connectionSuccess(success("connection-record"));
   });
   const zoho = {
@@ -228,6 +232,31 @@ test("moves a Stakeholder history with its live fields, owner, Contacts, and att
   expect(fixture.fileApi.getAttachments.mock.calls.every(([request]) =>
     request.strict === true
   )).toBe(true);
+});
+
+test("verifies the new Matter History through the CRM connection readback", async () => {
+  const fixture = makeApi({ contacts: [], attachments: [] });
+  const getRecord = fixture.api.getRecord.getMockImplementation();
+  fixture.api.getRecord.mockImplementation(async (request) => {
+    if (request.Entity === "Applications_History") {
+      return { data: [{ id: "target-1", History_Details: "" }] };
+    }
+    return getRecord(request);
+  });
+
+  await expect(fixture.move()).resolves.toHaveProperty("targetId", "target-1");
+
+  expect(fixture.api.getRecord.mock.calls.some(([request]) =>
+    request.Entity === "Applications_History"
+  )).toBe(false);
+  expect(fixture.zoho.CRM.CONNECTION.invoke).toHaveBeenCalledWith(
+    "zoho_crm_conn",
+    expect.objectContaining({
+      method: "GET",
+      url: expect.stringContaining("/crm/v8/Applications_History/target-1?approved=both"),
+      param_type: 1,
+    })
+  );
 });
 
 test("uses Billable for a legacy source without Billing Type", async () => {

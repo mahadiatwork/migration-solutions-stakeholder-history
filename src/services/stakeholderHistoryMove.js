@@ -51,6 +51,24 @@ async function createApplicationHistory(zoho, payload) {
   return body;
 }
 
+async function readApplicationHistory(zoho, id) {
+  const response = await zoho.CRM.CONNECTION.invoke(conn_name, {
+    url: `${dataCenterMap.AU}/crm/v8/${TARGET_MODULE}/${id}?approved=both`,
+    method: "GET",
+    param_type: 1,
+  });
+  const statusCode = Number(response?.details?.statusCode ?? response?.statusCode ?? 0);
+  const body = unwrapConnectionResponse(response);
+  if (statusCode >= 400) {
+    throw new Error(body?.data?.[0]?.message || body?.message || `Zoho CRM request failed (${statusCode})`);
+  }
+  const record = body?.data?.[0];
+  if (!record?.id || String(record.id) !== String(id)) {
+    throw new Error(`Could not verify ${TARGET_MODULE} record ${id}`);
+  }
+  return record;
+}
+
 const normalizeProgress = (value) => {
   const first = Array.isArray(value) ? value[0] : value;
   if (first == null) return "";
@@ -326,19 +344,19 @@ export async function moveStakeholderHistoryToApplication({
       createdThisCall = true;
     } else {
       // Reusing a partial target must never silently redirect it to another Matter.
-      const existing = await getRecord(zoho, TARGET_MODULE, targetId);
+      const existing = await readApplicationHistory(zoho, targetId);
       if (String(idOf(existing.Application)) !== String(applicationId)) {
         throw new Error("The partial target belongs to a different Matter");
       }
     }
 
-    let target = await getRecord(zoho, TARGET_MODULE, targetId);
+    let target = await readApplicationHistory(zoho, targetId);
     if (idOf(source.Owner) && String(idOf(target.Owner)) !== String(idOf(source.Owner))) {
       const changed = await changeOwner(TARGET_MODULE, targetId, idOf(source.Owner));
       if (changed?.error || !changed?.data) {
         throw new Error(`Could not preserve the owner: ${changed?.error || "Zoho did not confirm the change"}`);
       }
-      target = await getRecord(zoho, TARGET_MODULE, targetId);
+      target = await readApplicationHistory(zoho, targetId);
     }
     verifyTarget(source, target, applicationId, preservedStakeholderId, snapshot);
 
@@ -405,7 +423,7 @@ export async function moveStakeholderHistoryToApplication({
     }
 
     // Verify once more immediately before any destructive operation.
-    verifyTarget(source, await getRecord(zoho, TARGET_MODULE, targetId), applicationId, preservedStakeholderId, snapshot);
+    verifyTarget(source, await readApplicationHistory(zoho, targetId), applicationId, preservedStakeholderId, snapshot);
     await verifyContactSetWithRetry(zoho, sourceContacts, targetId, delay);
 
     const deletedContacts = [];
