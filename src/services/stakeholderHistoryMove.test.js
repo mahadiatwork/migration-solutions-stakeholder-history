@@ -223,6 +223,18 @@ test("accepts Zoho newline normalization in destination history details", async 
   expect(fixture.records["history-1"]).toBeUndefined();
 });
 
+test("accepts harmless imported-email whitespace normalization", async () => {
+  const fixture = makeApi({
+    contacts: [],
+    attachments: [],
+    sourceDetails: "\uFEFFFirst line\r\n\tSecond line  \r\n",
+    targetDetails: "First line\n    Second line\n",
+  });
+
+  await expect(fixture.move()).resolves.toHaveProperty("targetId", "target-1");
+  expect(fixture.records["history-1"]).toBeUndefined();
+});
+
 test("waits for delayed attachment listing before deleting the source", async () => {
   const fixture = makeApi({ attachmentListingLag: 2 });
   await expect(fixture.move()).resolves.toHaveProperty("targetId", "target-1");

@@ -14,7 +14,12 @@ const normalizeProgress = (value) => {
 };
 
 const normalizeZohoText = (value) =>
-  String(value ?? "").replace(/\r\n?/g, "\n");
+  String(value ?? "")
+    .normalize("NFC")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\uFEFF\u200B]/g, "")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ +(?=\n|$)/g, "");
 
 async function progressFieldType(zoho, matter) {
   const fallback = Array.isArray(matter.Matter_Progress) ? "multiselectpicklist" : "picklist";
